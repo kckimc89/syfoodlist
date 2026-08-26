@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V15</title>
+<title>어린이 음식도감 V16</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -17,6 +17,11 @@ button:active{transform:scale(.98)} .wrap{max-width:900px;margin:auto;padding:14
 .infoBox,.learnbox{background:#eef7ff;border-radius:15px;padding:13px;font-size:13px;line-height:1.6;margin-top:10px}.learn{line-height:1.7}.learn h3{font-size:24px;margin:5px 0 12px}.section{margin:15px 0;padding-top:10px;border-top:1px solid #eee}.section h4{margin:0 0 6px}.detailPhoto{width:100%;max-height:360px;object-fit:cover;border-radius:18px;background:#eee}.empty{text-align:center;padding:45px 10px;color:#777}
 .small{font-size:12px;color:#777}.danger{background:#e33!important;color:#fff!important}
 @media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}.modal{align-items:center}.sheet{border-radius:22px}}
+
+.photoChoice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.photoBig{min-height:145px;background:#f7f7f7;border:2px solid #e5e5e5;box-shadow:none;font-size:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.photoBig b{font-size:15px}.photoBig span{font-size:12px;font-weight:500;color:#777}
+@media(max-width:430px){.photoChoice{grid-template-columns:1fr}.photoBig{min-height:120px}}
 </style>
 </head>
 <body>
@@ -85,7 +90,7 @@ function detail(id){
  ${section("💡 알아두면 좋은 점",f.tip||"아직 알려주지 않았어요.")}
  </div>
  <div class="actions">
- <button onclick="photoForFood('${f.id}')">📷 ${f.photo?"사진 바꾸기":"사진 찍어 등록"}</button>
+ <button onclick="photoForFood('${f.id}')">📷 ${f.photo?"사진 바꾸기":"사진 등록"}</button>
  ${parentMode?`<button onclick="editFood('${f.id}')">✏️ 부모님 설명 수정</button><button class="danger" onclick="deleteFood('${f.id}')">🗑️ 삭제</button>`:""}
  <button class="alt" onclick="closeModal()">닫기</button>
 </div>`);
@@ -116,19 +121,44 @@ function saveAdd(){
 }
 function photoForFood(id){
  const f=data.find(x=>x.id===id); if(!f)return;
- openModal(`<h2>📷 음식 사진 등록</h2>
- <p><b>${esc(f.name)}</b>의 사진을 직접 찍거나 사진 보관함에서 선택해 주세요.</p>
- <div class="field"><label>📷 음식 사진</label><input id="photo_only" type="file" accept="image/*" capture="environment"></div>
- <div class="infoBox">사진을 선택하면 음식도감에 바로 저장됩니다.<br>기존 사진이 있다면 새 사진으로 교체됩니다.</div>
- <div class="actions"><button onclick="savePhotoOnly('${id}')">사진 저장</button><button class="alt" onclick="detail('${id}')">취소</button></div>`);
+ openModal(`<h2>📷 사진 등록</h2>
+ <p><b>${esc(f.name)}</b>의 사진을 등록해 주세요.</p>
+ <div class="photoChoice">
+   <button class="photoBig" onclick="cameraInput('${id}')">📷<br><b>아이패드로 사진 촬영</b><span>지금 음식 사진을 찍어요</span></button>
+   <button class="photoBig" onclick="libraryInput('${id}')">🖼️<br><b>사진 보관함에서 선택</b><span>이미 찍어둔 사진을 사용해요</span></button>
+ </div>
+ <div class="infoBox">💡 사진을 등록하면 음식도감에 바로 저장됩니다.<br>기존 사진이 있다면 새 사진으로 교체됩니다.</div>
+ <div class="actions"><button class="alt" onclick="detail('${id}')">취소</button></div>`);
 }
-function savePhotoOnly(id){
- const f=data.find(x=>x.id===id); if(!f)return;
- const file=$("photo_only").files[0];
- if(!file){alert("사진을 선택해 주세요.");return}
+function cameraInput(id){
+ const input=document.createElement("input");
+ input.type="file"; input.accept="image/*"; input.setAttribute("capture","environment");
+ input.style.display="none";
+ input.onchange=()=>handlePhotoFile(id,input.files[0]);
+ document.body.appendChild(input);
+ input.click();
+ setTimeout(()=>input.remove(),1000);
+}
+function libraryInput(id){
+ const input=document.createElement("input");
+ input.type="file"; input.accept="image/*";
+ input.style.display="none";
+ input.onchange=()=>handlePhotoFile(id,input.files[0]);
+ document.body.appendChild(input);
+ input.click();
+ setTimeout(()=>input.remove(),1000);
+}
+function handlePhotoFile(id,file){
+ const f=data.find(x=>x.id===id); if(!f || !file)return;
  const r=new FileReader();
  r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;save();render();detail(id)});
  r.readAsDataURL(file);
+}
+function savePhotoOnly(id){
+ const input=document.createElement("input");
+ input.type="file"; input.accept="image/*";
+ input.onchange=()=>handlePhotoFile(id,input.files[0]);
+ input.click();
 }
 function parent(){
  const pin=prompt("부모님 모드 PIN을 입력하세요.");
