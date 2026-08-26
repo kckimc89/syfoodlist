@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V18</title>
+<title>어린이 음식도감 V20</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -51,6 +51,9 @@ button{font-size:16px;padding:14px 10px}
 .photoBig span{font-size:14px}
 .actions button{font-size:16px;min-height:50px}
 .empty{font-size:17px}
+
+.catRow{display:flex;gap:7px;align-items:center;padding:9px;border:1px solid #e5e5e5;border-radius:12px;background:#fafafa}
+.catRow .danger,.catRow .alt{padding:9px 8px;font-size:13px}
 </style>
 </head>
 <body>
@@ -95,16 +98,16 @@ function closeModal(){stopCamera();$("modal").classList.remove("show")}
 $("modal").addEventListener("click",e=>{if(e.target===$("modal"))closeModal()})
 
 function renderFilters(){
- const cats=["전체",...new Set(data.map(x=>x.cat||"새로 발견한 음식"))];
+ const cats=["전체",...new Set(data.map(x=>x.cat||"미분류"))];
  $("filters").innerHTML=cats.map(c=>`<button class="chip ${c===category?"on":""}" onclick="setCat('${esc(c)}')">${esc(c)}</button>`).join("");
 }
 function setCat(c){category=c;render()}
 function render(){
  renderFilters();
- const list=category==="전체"?data:data.filter(x=>(x.cat||"새로 발견한 음식")===category);
+ const list=category==="전체"?data:data.filter(x=>(x.cat||"미분류")===category);
  $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')">
  <div class="pic">${f.photo?`<img src="${f.photo}" alt="">`:`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div>
- <div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"새로 발견한 음식")}</div></div>
+ <div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div></div>
  </div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
 }
 function detail(id){
@@ -143,7 +146,7 @@ function resizeImage(data,max,q,done){
 }
 function saveAdd(){
  const name=$("a_name").value.trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
- const f={id:"u"+Date.now(),name,cat:"새로 발견한 음식",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,
+ const f={id:"u"+Date.now(),name,cat:"미분류",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,
  place:$("a_place").value,feel:$("a_feel").value,again:$("a_again").value,memo:$("a_memo").value.trim()};
  const file=$("a_photo").files[0],finish=()=>{data.unshift(f);save();closeModal();render()};
  if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
@@ -237,19 +240,81 @@ function parent(){
  if(pin==="1234"){parentMode=!parentMode;alert(parentMode?"부모님 모드가 켜졌어요.":"부모님 모드가 꺼졌어요.");render()}
  else alert("PIN이 맞지 않아요.");
 }
+function foodsOnly(){ return data.filter(x=>!x.isCategoryPlaceholder); }
+function getCategories(){
+ const cats=[...new Set(foodsOnly().map(x=>(x.cat||"미분류").trim()).filter(Boolean))];
+ if(!cats.includes("미분류"))cats.unshift("미분류");
+ return cats;
+}
+function categoryOptions(current){
+ const cats=getCategories();
+ if(!cats.includes("미분류"))cats.unshift("미분류");
+ return cats.map(c=>`<option value="${esc(c)}" ${c===current?"selected":""}>${esc(c)}</option>`).join("");
+}
+function manageCategories(foodId){
+ const cats=getCategories();
+ openModal(`<h2>📂 카테고리 관리</h2>
+ <div class="infoBox">카테고리의 이름을 바꾸거나 삭제하고, 새로운 카테고리를 만들 수 있습니다.<br>카테고리를 지정하지 않은 음식은 <b>미분류</b>에 모입니다.<br>
+ <b>삭제한 카테고리의 음식은 '미분류'으로 이동합니다.</b></div>
+ <div id="catManagerList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0">
+ ${cats.map(c=>`<div class="catRow" data-cat="${esc(c)}">
+   <span style="flex:1;font-size:16px">${esc(c)} <small style="color:#777">(${foodsOnly().filter(x=>(x.cat||"미분류")===c).length}개)</small></span>
+   <button class="alt" onclick="renameCategory('${jsq(c)}','${foodId}')">✏️ 이름변경</button>
+   <button class="danger" onclick="removeCategory('${jsq(c)}','${foodId}')">🗑️ 삭제</button>
+ </div>`).join("")}
+ </div>
+ <div class="field"><label>➕ 새로운 카테고리</label>
+   <div style="display:flex;gap:8px">
+     <input id="newCategoryName" placeholder="예: 과일, 디저트, 음료" style="flex:1">
+     <button onclick="addCategory('${foodId}')">추가</button>
+   </div>
+ </div>
+ <div class="actions"><button class="alt" onclick="editFood('${foodId}')">돌아가기</button></div>`);
+}
+function addCategory(foodId){
+ const name=$("newCategoryName").value.trim();
+ if(!name){alert("새로운 카테고리 이름을 입력해 주세요.");return}
+ if(getCategories().some(c=>c===name)){alert("이미 등록된 카테고리입니다.");return}
+ // Category list is derived from foods, so create a small category placeholder.
+ data.push({id:"cat_"+Date.now()+"_"+Math.random().toString(36).slice(2),name:"(카테고리)",cat:name,desc:"",ing:"",how:"",health:"",tip:"",photo:"",isCategoryPlaceholder:true});
+ save(); render(); manageCategories(foodId);
+}
+function renameCategory(oldName,foodId){
+ const next=prompt(`'${oldName}'의 새 이름을 입력하세요.`,oldName);
+ if(next===null)return;
+ const name=next.trim();
+ if(!name)return;
+ if(name!==oldName && getCategories().some(c=>c===name)){alert("이미 등록된 카테고리 이름입니다.");return}
+ data.forEach(x=>{if((x.cat||"미분류")===oldName)x.cat=name});
+ save(); render(); manageCategories(foodId);
+}
+function removeCategory(name,foodId){
+ if(name==="미분류"){alert("기본 카테고리는 삭제할 수 없습니다.");return}
+ const count=data.filter(x=>(x.cat||"미분류")===name).length;
+ if(!confirm(`'${name}' 카테고리를 삭제할까요?\n등록된 음식 ${count}개는 '미분류'으로 이동합니다.`))return;
+ data.forEach(x=>{if((x.cat||"미분류")===name)x.cat="미분류"});
+ save(); render(); manageCategories(foodId);
+}
 function editFood(id){
  const f=data.find(x=>x.id===id);if(!f)return;
  openModal(`<h2>✏️ 부모님 설명 보완</h2>
  <div class="infoBox">👧 아이가 기록한 내용<br>장소: ${esc(f.place||"기록 없음")}<br>느낌: ${esc(f.feel||"기록 없음")}<br>다시 먹기: ${esc(f.again||"기록 없음")}<br>한마디: ${esc(f.memo||"기록 없음")}</div>
  ${editField("e_desc","음식 설명",f.desc)}${editField("e_ing","주재료",f.ing)}${editField("e_how","어떻게 만들까요?",f.how)}${editField("e_health","건강하게 먹는 법",f.health)}${editField("e_tip","알아두면 좋은 점",f.tip)}
- <div class="field"><label>📂 카테고리</label><input id="e_cat" value="${esc(f.cat||"새로 발견한 음식")}"></div>
+ <div class="field">
+ <label>📂 카테고리</label>
+ <div style="display:flex;gap:8px;align-items:center">
+   <select id="e_cat" style="flex:1">${categoryOptions(f.cat)}</select>
+   <button type="button" class="alt" onclick="manageCategories('${f.id}')">⚙️ 관리</button>
+ </div>
+ <div class="small">기존 카테고리를 선택하거나 ⚙️ 관리에서 추가·이름변경·삭제할 수 있습니다.</div>
+</div>
  <div class="field"><label>📷 사진 교체</label><input id="e_photo" type="file" accept="image/*" capture="environment"></div>
  <div class="actions"><button onclick="saveEdit('${f.id}')">저장</button><button class="alt" onclick="detail('${f.id}')">취소</button></div>`);
 }
 function editField(id,label,val){return `<div class="field"><label>${label}</label><textarea id="${id}">${esc(val||"")}</textarea></div>`}
 function saveEdit(id){
  const f=data.find(x=>x.id===id);if(!f)return;
- f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"새로 발견한 음식";
+ f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"미분류";
  const file=$("e_photo").files[0];
  const finish=()=>{save();detail(id);render()};
  if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
