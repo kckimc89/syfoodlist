@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>어린이 음식도감 V14</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
+header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:25px} .sub{margin-top:5px;font-size:13px}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+button{border:0;border-radius:14px;padding:12px 9px;background:#fff;font-weight:700;box-shadow:0 2px 8px #00000014}
+button:active{transform:scale(.98)} .wrap{max-width:900px;margin:auto;padding:14px}
+.filters{display:flex;gap:7px;overflow:auto;padding-bottom:8px}.chip{white-space:nowrap;background:#eee;border-radius:999px;padding:8px 12px}.chip.on{background:#333;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.card{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 2px 10px #00000012}.pic{height:145px;background:#f1f1f1;display:flex;align-items:center;justify-content:center;font-size:55px}.pic img{width:100%;height:100%;object-fit:cover}.ct{padding:11px}.name{font-weight:800;font-size:17px}.cat{font-size:12px;color:#777;margin-top:3px}
+.modal{position:fixed;inset:0;background:#0008;display:none;align-items:flex-end;justify-content:center;z-index:20}.modal.show{display:flex}.sheet{background:#fff;width:100%;max-width:720px;max-height:92vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px}.field{margin:12px 0}.field label{display:block;font-weight:800;font-size:14px;margin-bottom:6px}.field input,.field select,.field textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:12px;font:inherit}.field textarea{min-height:80px;resize:vertical}.actions{display:flex;gap:8px;margin-top:16px}.actions button{flex:1;background:#222;color:#fff}.actions .alt{background:#eee;color:#333}
+.infoBox,.learnbox{background:#eef7ff;border-radius:15px;padding:13px;font-size:13px;line-height:1.6;margin-top:10px}.learn{line-height:1.7}.learn h3{font-size:24px;margin:5px 0 12px}.section{margin:15px 0;padding-top:10px;border-top:1px solid #eee}.section h4{margin:0 0 6px}.detailPhoto{width:100%;max-height:360px;object-fit:cover;border-radius:18px;background:#eee}.empty{text-align:center;padding:45px 10px;color:#777}
+.small{font-size:12px;color:#777}.danger{background:#e33!important;color:#fff!important}
+@media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}.modal{align-items:center}.sheet{border-radius:22px}}
+</style>
+</head>
+<body>
+<header>
+<h1>🍴 어린이 음식도감</h1>
+<div class="sub">아이가 발견하고 기록하면 부모님이 함께 알려주는 음식도감</div>
+<div class="controls">
+<button id="addBtn">➕ 새로운 음식 발견</button>
+<button id="parentBtn">🔒 부모님 모드</button>
+<button id="backupBtn">💾 백업</button>
+</div>
+</header>
+<div class="wrap">
+<div class="filters" id="filters"></div>
+<div id="grid" class="grid"></div>
+</div>
+<div id="modal" class="modal"><div id="sheet" class="sheet"></div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const KEY="kids_food_v14";
+let parentMode=false, category="전체";
+const base=[
+{name:"떡볶이",cat:"분식",desc:"떡과 어묵 등을 매콤달콤한 양념에 끓여 먹는 음식이에요.",ing:"떡, 어묵, 양념",how:"양념을 넣은 국물에 재료를 넣고 끓여요.",health:"채소와 함께 먹고 양념은 적당히 먹어요.",tip:"뜨거울 수 있으니 천천히 먹어요."},
+{name:"김밥",cat:"분식",desc:"밥과 여러 재료를 김으로 돌돌 말아 먹는 음식이에요.",ing:"밥, 김, 단무지, 달걀, 채소 등",how:"김 위에 밥과 재료를 올려 돌돌 말아요.",health:"채소와 단백질 재료를 함께 먹을 수 있어요.",tip:"재료에 따라 맛과 영양이 달라져요."},
+{name:"짜장면",cat:"면",desc:"면에 짜장 소스를 곁들여 먹는 중국식 면 음식이에요.",ing:"면, 춘장, 돼지고기, 양파 등",how:"재료를 볶아 짜장 소스를 만들고 면에 올려요.",health:"소스는 너무 많이 먹지 않도록 해요.",tip:"면을 먹기 전에 소스 속 재료를 찾아보세요."},
+{name:"돈가스",cat:"식사",desc:"고기에 빵가루를 입혀 바삭하게 익힌 음식이에요.",ing:"돼지고기, 빵가루, 달걀 등",how:"고기에 튀김옷을 입혀 익혀요.",health:"샐러드나 채소와 함께 먹으면 좋아요.",tip:"고기의 종류와 익히는 방법을 살펴보세요."}
+];
+let data=[];
+try{data=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){data=[]}
+if(!Array.isArray(data))data=[];
+base.forEach((b,i)=>{if(!data.some(x=>x.name===b.name)){data.push({...b,id:"b"+i,photo:"",seen:false,fav:false,place:"",feel:"",again:"",memo:""})}});
+save();
+
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function openModal(content){$("sheet").innerHTML=content;$("modal").classList.add("show")}
+function closeModal(){$("modal").classList.remove("show")}
+$("modal").addEventListener("click",e=>{if(e.target===$("modal"))closeModal()})
+
+function renderFilters(){
+ const cats=["전체",...new Set(data.map(x=>x.cat||"새로 발견한 음식"))];
+ $("filters").innerHTML=cats.map(c=>`<button class="chip ${c===category?"on":""}" onclick="setCat('${esc(c)}')">${esc(c)}</button>`).join("");
+}
+function setCat(c){category=c;render()}
+function render(){
+ renderFilters();
+ const list=category==="전체"?data:data.filter(x=>(x.cat||"새로 발견한 음식")===category);
+ $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')">
+ <div class="pic">${f.photo?`<img src="${f.photo}" alt="">`:"🍴"}</div>
+ <div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"새로 발견한 음식")}</div></div>
+ </div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
+}
+function detail(id){
+ const f=data.find(x=>x.id===id); if(!f)return;
+ openModal(`<div>${f.photo?`<img class="detailPhoto" src="${f.photo}" alt="">`:`<div class="pic" style="height:220px;border-radius:18px">🍴</div>`}</div>
+ <div class="learn"><h3>${esc(f.name)}</h3>
+ ${f.place||f.feel||f.again||f.memo?`<div class="learnbox"><b>👧 내가 기록한 이야기</b><br>📍 ${esc(f.place||"기록 없음")}<br>😋 ${esc(f.feel||"기록 없음")}<br>❤️ 다시 먹기: ${esc(f.again||"기록 없음")}<br>✏️ ${esc(f.memo||"기록 없음")}</div>`:""}
+ ${section("음식 설명",f.desc||"아직 부모님 설명이 없어요.")}
+ ${section("주재료",f.ing||"아직 알려주지 않았어요.")}
+ ${section("어떻게 만들까요?",f.how||"아직 알려주지 않았어요.")}
+ ${section("건강하게 먹는 법",f.health||"아직 알려주지 않았어요.")}
+ ${section("💡 알아두면 좋은 점",f.tip||"아직 알려주지 않았어요.")}
+ </div>
+ <div class="actions">${parentMode?`<button onclick="editFood('${f.id}')">✏️ 부모님 설명 수정</button><button class="danger" onclick="deleteFood('${f.id}')">🗑️ 삭제</button>`:""}<button class="alt" onclick="closeModal()">닫기</button></div>`);
+}
+function section(t,v){return `<div class="section"><h4>${t}</h4><div>${esc(v)}</div></div>`}
+
+function addFood(){
+ openModal(`<h2>➕ 새로운 음식 발견!</h2>
+ <p>아이가 직접 먹어본 음식만 간단히 기록해 보세요.</p>
+ <div class="field"><label>🍴 음식 이름</label><input id="a_name" placeholder="예: 마라탕"></div>
+ <div class="field"><label>📷 음식 사진</label><input id="a_photo" type="file" accept="image/*" capture="environment"></div>
+ <div class="field"><label>📍 어디서 먹었나요?</label><select id="a_place"><option>집</option><option>학교</option><option>학교 주변</option><option>식당</option><option>여행</option><option>기타</option></select></div>
+ <div class="field"><label>😋 어떤 느낌이었나요?</label><select id="a_feel"><option>😋 아주 맛있었어요</option><option>🙂 맛있었어요</option><option>😐 보통이었어요</option><option>😖 별로였어요</option></select></div>
+ <div class="field"><label>❤️ 다시 먹고 싶나요?</label><select id="a_again"><option>네</option><option>잘 모르겠어요</option><option>아니요</option></select></div>
+ <div class="field"><label>✏️ 내가 한마디</label><textarea id="a_memo" placeholder="예: 조금 매웠지만 맛있었어요!"></textarea></div>
+ <div class="infoBox">📚 <b>음식 지식은 나중에 부모님과 함께 채워요.</b><br>주재료·만드는 방법·건강하게 먹는 법·알아두면 좋은 점은 지금 입력하지 않아도 됩니다.</div>
+ <div class="actions"><button onclick="saveAdd()">도감에 저장</button><button class="alt" onclick="closeModal()">취소</button></div>`);
+}
+function resizeImage(data,max,q,done){
+ const im=new Image();im.onload=()=>{let w=im.width,h=im.height;if(w>max){h=Math.round(h*max/w);w=max}const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(im,0,0,w,h);done(c.toDataURL("image/jpeg",q))};im.src=data;
+}
+function saveAdd(){
+ const name=$("a_name").value.trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
+ const f={id:"u"+Date.now(),name,cat:"새로 발견한 음식",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,
+ place:$("a_place").value,feel:$("a_feel").value,again:$("a_again").value,memo:$("a_memo").value.trim()};
+ const file=$("a_photo").files[0],finish=()=>{data.unshift(f);save();closeModal();render()};
+ if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
+}
+function parent(){
+ const pin=prompt("부모님 모드 PIN을 입력하세요.");
+ if(pin==="1234"){parentMode=!parentMode;alert(parentMode?"부모님 모드가 켜졌어요.":"부모님 모드가 꺼졌어요.");render()}
+ else alert("PIN이 맞지 않아요.");
+}
+function editFood(id){
+ const f=data.find(x=>x.id===id);if(!f)return;
+ openModal(`<h2>✏️ 부모님 설명 보완</h2>
+ <div class="infoBox">👧 아이가 기록한 내용<br>장소: ${esc(f.place||"기록 없음")}<br>느낌: ${esc(f.feel||"기록 없음")}<br>다시 먹기: ${esc(f.again||"기록 없음")}<br>한마디: ${esc(f.memo||"기록 없음")}</div>
+ ${editField("e_desc","음식 설명",f.desc)}${editField("e_ing","주재료",f.ing)}${editField("e_how","어떻게 만들까요?",f.how)}${editField("e_health","건강하게 먹는 법",f.health)}${editField("e_tip","알아두면 좋은 점",f.tip)}
+ <div class="field"><label>📂 카테고리</label><input id="e_cat" value="${esc(f.cat||"새로 발견한 음식")}"></div>
+ <div class="field"><label>📷 사진 교체</label><input id="e_photo" type="file" accept="image/*" capture="environment"></div>
+ <div class="actions"><button onclick="saveEdit('${f.id}')">저장</button><button class="alt" onclick="detail('${f.id}')">취소</button></div>`);
+}
+function editField(id,label,val){return `<div class="field"><label>${label}</label><textarea id="${id}">${esc(val||"")}</textarea></div>`}
+function saveEdit(id){
+ const f=data.find(x=>x.id===id);if(!f)return;
+ f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"새로 발견한 음식";
+ const file=$("e_photo").files[0];
+ const finish=()=>{save();detail(id);render()};
+ if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
+}
+function deleteFood(id){
+ if(!confirm("이 음식을 도감에서 삭제할까요?"))return;
+ data=data.filter(x=>x.id!==id);save();closeModal();render();
+}
+function backup(){
+ const blob=new Blob([JSON.stringify(data)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="어린이음식도감_백업.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+$("addBtn").onclick=addFood;$("parentBtn").onclick=parent;$("backupBtn").onclick=backup;
+render();
+</script>
+</body>
+</html>
