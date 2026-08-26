@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V14</title>
+<title>어린이 음식도감 V15</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -69,7 +69,7 @@ function render(){
  renderFilters();
  const list=category==="전체"?data:data.filter(x=>(x.cat||"새로 발견한 음식")===category);
  $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')">
- <div class="pic">${f.photo?`<img src="${f.photo}" alt="">`:"🍴"}</div>
+ <div class="pic">${f.photo?`<img src="${f.photo}" alt="">`:`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div>
  <div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"새로 발견한 음식")}</div></div>
  </div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
 }
@@ -84,7 +84,11 @@ function detail(id){
  ${section("건강하게 먹는 법",f.health||"아직 알려주지 않았어요.")}
  ${section("💡 알아두면 좋은 점",f.tip||"아직 알려주지 않았어요.")}
  </div>
- <div class="actions">${parentMode?`<button onclick="editFood('${f.id}')">✏️ 부모님 설명 수정</button><button class="danger" onclick="deleteFood('${f.id}')">🗑️ 삭제</button>`:""}<button class="alt" onclick="closeModal()">닫기</button></div>`);
+ <div class="actions">
+ <button onclick="photoForFood('${f.id}')">📷 ${f.photo?"사진 바꾸기":"사진 찍어 등록"}</button>
+ ${parentMode?`<button onclick="editFood('${f.id}')">✏️ 부모님 설명 수정</button><button class="danger" onclick="deleteFood('${f.id}')">🗑️ 삭제</button>`:""}
+ <button class="alt" onclick="closeModal()">닫기</button>
+</div>`);
 }
 function section(t,v){return `<div class="section"><h4>${t}</h4><div>${esc(v)}</div></div>`}
 
@@ -109,6 +113,22 @@ function saveAdd(){
  place:$("a_place").value,feel:$("a_feel").value,again:$("a_again").value,memo:$("a_memo").value.trim()};
  const file=$("a_photo").files[0],finish=()=>{data.unshift(f);save();closeModal();render()};
  if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
+}
+function photoForFood(id){
+ const f=data.find(x=>x.id===id); if(!f)return;
+ openModal(`<h2>📷 음식 사진 등록</h2>
+ <p><b>${esc(f.name)}</b>의 사진을 직접 찍거나 사진 보관함에서 선택해 주세요.</p>
+ <div class="field"><label>📷 음식 사진</label><input id="photo_only" type="file" accept="image/*" capture="environment"></div>
+ <div class="infoBox">사진을 선택하면 음식도감에 바로 저장됩니다.<br>기존 사진이 있다면 새 사진으로 교체됩니다.</div>
+ <div class="actions"><button onclick="savePhotoOnly('${id}')">사진 저장</button><button class="alt" onclick="detail('${id}')">취소</button></div>`);
+}
+function savePhotoOnly(id){
+ const f=data.find(x=>x.id===id); if(!f)return;
+ const file=$("photo_only").files[0];
+ if(!file){alert("사진을 선택해 주세요.");return}
+ const r=new FileReader();
+ r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;save();render();detail(id)});
+ r.readAsDataURL(file);
 }
 function parent(){
  const pin=prompt("부모님 모드 PIN을 입력하세요.");
