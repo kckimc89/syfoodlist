@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V21</title>
+<title>어린이 음식도감 V22</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -245,66 +245,116 @@ function foodsOnly(){ return data.filter(x=>!x.isCategoryPlaceholder); }
 const CATEGORY_KEY="kids_food_categories_v21";
 const DEFAULT_CATEGORIES=["미분류","밥/한식","면","분식","고기","국/찌개","반찬","간식","디저트","음료","외식"];
 
+
+const CATEGORY_KEY="kids_food_categories_v22";
+const DEFAULT_CATEGORIES=["미분류","밥/한식","면","분식","고기","국/찌개","반찬","간식","디저트","음료","외식"];
+
 function getCategories(){
  let saved=[];
  try{ saved=JSON.parse(localStorage.getItem(CATEGORY_KEY)||"[]"); }catch(e){ saved=[]; }
- const used=data.filter(x=>!x.isCategoryPlaceholder).map(x=>(x.cat||"미분류").trim()).filter(Boolean);
- const cats=[...new Set([...DEFAULT_CATEGORIES,...saved,...used])];
+ if(!Array.isArray(saved)) saved=[];
+ const used=data.filter(x=>!x.isCategoryPlaceholder)
+   .map(x=>(x.cat||"미분류").trim()).filter(Boolean);
+ let cats=[...new Set([...DEFAULT_CATEGORIES,...saved,...used])];
+ if(!cats.includes("미분류")) cats.unshift("미분류");
  return cats;
 }
 function saveCategories(cats){
- localStorage.setItem(CATEGORY_KEY,JSON.stringify([...new Set(cats.filter(Boolean))]));
+ const clean=[...new Set(cats.map(x=>(x||"").trim()).filter(Boolean))];
+ if(!clean.includes("미분류")) clean.unshift("미분류");
+ localStorage.setItem(CATEGORY_KEY,JSON.stringify(clean));
 }
 function categoryOptions(current){
- return getCategories().map(c=>`<option value="${esc(c)}" ${c===current?"selected":""}>${esc(c)}</option>`).join("");
+ const cats=getCategories();
+ if(!cats.includes(current)) cats.push(current);
+ return cats.map(c=>`<option value="${esc(c)}" ${c===current?"selected":""}>${esc(c)}</option>`).join("");
 }
 function manageCategories(foodId){
  const cats=getCategories();
  openModal(`<h2>📂 카테고리 관리</h2>
- <div class="infoBox">기존 카테고리를 선택하거나 새로 만들 수 있습니다.<br>
- <b>이름 변경</b>은 해당 카테고리의 모든 음식에 적용되고,
- <b>삭제</b>하면 해당 음식은 '미분류'로 이동합니다.</div>
+ <div class="infoBox">
+  모든 카테고리를 관리할 수 있습니다.<br>
+  ✏️ 이름변경: 해당 카테고리에 속한 음식도 새 이름으로 함께 변경됩니다.<br>
+  🗑️ 삭제: 해당 카테고리의 음식은 <b>미분류</b>로 이동합니다.
+ </div>
  <div id="catManagerList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0">
- ${cats.map(c=>`<div class="catRow">
-   <span style="flex:1;font-size:16px">${esc(c)} <small style="color:#777">(${data.filter(x=>!x.isCategoryPlaceholder&&(x.cat||"미분류")===c).length}개)</small></span>
-   ${c==="미분류"?"<span style='font-size:12px;color:#888'>기본</span>":`<button class="alt" onclick="renameCategory(${JSON.stringify(c)},'${foodId}')">✏️ 이름변경</button>
-   <button class="danger" onclick="removeCategory(${JSON.stringify(c)},'${foodId}')">🗑️ 삭제</button>`}
+ ${cats.map((c,i)=>`<div class="catRow" data-cat="${esc(c)}">
+   <span style="flex:1;font-size:16px">${esc(c)}
+    <small style="color:#777">(${data.filter(x=>!x.isCategoryPlaceholder&&(x.cat||"미분류")===c).length}개)</small>
+   </span>
+   <button class="alt" onclick="renameCategory(${JSON.stringify(c)},'${foodId}')">✏️ 이름변경</button>
+   <button class="danger" onclick="removeCategory(${JSON.stringify(c)},'${foodId}')">🗑️ 삭제</button>
  </div>`).join("")}
  </div>
  <div class="field"><label>➕ 새로운 카테고리</label>
-   <div style="display:flex;gap:8px">
-     <input id="newCategoryName" placeholder="예: 과일, 디저트, 음료" style="flex:1">
-     <button onclick="addCategory('${foodId}')">추가</button>
-   </div>
+  <div style="display:flex;gap:8px">
+   <input id="newCategoryName" placeholder="예: 과일, 디저트, 음료" style="flex:1">
+   <button onclick="addCategory('${foodId}')">추가</button>
+  </div>
  </div>
  <div class="actions"><button class="alt" onclick="editFood('${foodId}')">돌아가기</button></div>`);
 }
 function addCategory(foodId){
- const name=$("newCategoryName").value.trim();
+ const input=$("newCategoryName");
+ const name=(input?.value||"").trim();
  if(!name){alert("새로운 카테고리 이름을 입력해 주세요.");return}
- if(getCategories().includes(name)){alert("이미 등록된 카테고리입니다.");return}
- saveCategories([...getCategories(),name]);
- render(); manageCategories(foodId);
+ const cats=getCategories();
+ if(cats.includes(name)){alert("이미 등록된 카테고리입니다.");return}
+ cats.push(name);
+ saveCategories(cats);
+ render();
+ manageCategories(foodId);
 }
 function renameCategory(oldName,foodId){
- if(oldName==="미분류"){alert("기본 카테고리 '미분류'는 이름을 바꿀 수 없습니다.");return}
  const next=prompt(`'${oldName}'의 새 이름을 입력하세요.`,oldName);
  if(next===null)return;
  const name=next.trim();
  if(!name){alert("카테고리 이름을 입력해 주세요.");return}
- if(name!==oldName && getCategories().includes(name)){alert("이미 등록된 카테고리 이름입니다.");return}
- const cats=getCategories().map(c=>c===oldName?name:c);
- saveCategories(cats);
- data.forEach(x=>{if(!x.isCategoryPlaceholder&&(x.cat||"미분류")===oldName)x.cat=name});
- save(); render(); manageCategories(foodId);
+ if(name===oldName){return}
+ const cats=getCategories();
+ if(cats.includes(name)){alert("이미 등록된 카테고리 이름입니다.");return}
+
+ // Change the category of every matching food.
+ let changed=0;
+ data.forEach(x=>{
+   if(!x.isCategoryPlaceholder && (x.cat||"미분류")===oldName){
+     x.cat=name;
+     changed++;
+   }
+ });
+ saveCategories(cats.map(c=>c===oldName?name:c));
+ save();
+ render();
+ manageCategories(foodId);
 }
 function removeCategory(name,foodId){
- if(name==="미분류"){alert("기본 카테고리 '미분류'는 삭제할 수 없습니다.");return}
+ const cats=getCategories();
+ if(!cats.includes(name)){
+   alert("카테고리를 찾을 수 없습니다.");
+   return;
+ }
  const count=data.filter(x=>!x.isCategoryPlaceholder&&(x.cat||"미분류")===name).length;
- if(!confirm(`'${name}' 카테고리를 삭제할까요?\\n등록된 음식 ${count}개는 '미분류'로 이동합니다.`))return;
- saveCategories(getCategories().filter(c=>c!==name));
- data.forEach(x=>{if(!x.isCategoryPlaceholder&&(x.cat||"미분류")===name)x.cat="미분류"});
- save(); render(); manageCategories(foodId);
+ const msg=name==="미분류"
+   ? "'미분류' 카테고리를 삭제할까요?\n해당 음식은 카테고리가 없는 상태로 남습니다."
+   : `'${name}' 카테고리를 삭제할까요?\n등록된 음식 ${count}개는 '미분류'로 이동합니다.`;
+ if(!confirm(msg))return;
+
+ if(name==="미분류"){
+   // Fully allow deletion: remove it from the category list.
+   saveCategories(cats.filter(c=>c!=="미분류"));
+   // Keep affected foods visibly uncategorized by using empty string.
+   data.forEach(x=>{
+     if(!x.isCategoryPlaceholder && (x.cat||"미분류")==="미분류") x.cat="";
+   });
+ }else{
+   saveCategories(cats.filter(c=>c!==name));
+   data.forEach(x=>{
+     if(!x.isCategoryPlaceholder && (x.cat||"미분류")===name) x.cat="미분류";
+   });
+ }
+ save();
+ render();
+ manageCategories(foodId);
 }
 
 function editFood(id){
@@ -326,7 +376,7 @@ function editFood(id){
 function editField(id,label,val){return `<div class="field"><label>${label}</label><textarea id="${id}">${esc(val||"")}</textarea></div>`}
 function saveEdit(id){
  const f=data.find(x=>x.id===id);if(!f)return;
- f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value||"미분류";
+ f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value;
  const file=$("e_photo").files[0];
  const finish=()=>{save();detail(id);render()};
  if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
