@@ -59,7 +59,7 @@ button{font-size:16px;padding:14px 10px}
 <meta name="apple-mobile-web-app-title" content="어린이 음식도감">
 <link rel="apple-touch-icon" href="icon-192.png">
 
-</head>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"><link rel="icon" sizes="192x192" href="icon-192.png"></head>
 <body>
 <header>
 <h1>🍴 어린이 음식도감</h1>
@@ -1311,5 +1311,41 @@ window.addEventListener("load",()=>setTimeout(wire,500));
 })();
 </script>
 
+
+<script>
+(function(){
+"use strict";
+const KEY="kids_food_book_child_name";
+function getN(){try{return localStorage.getItem(KEY)||""}catch(e){return""}}
+function setN(v){try{localStorage.setItem(KEY,String(v||"").trim())}catch(e){}}
+function title(){
+ const n=getN(), t=n?("🍴 "+n+"의 어린이 음식도감"):"🍴 어린이 음식도감";
+ const els=[...document.querySelectorAll("h1,.app-title,.logo-title,.title")];
+ const el=els.find(x=>/어린이 음식도감/.test(x.textContent||""));
+ if(el)el.textContent=t;
+ document.title=n?(n+"의 어린이 음식도감"):"어린이 음식도감";
+}
+function editName(){
+ const old=getN(), v=prompt("아이의 이름을 입력하세요.",old);
+ if(v===null)return;
+ if(v.trim().length>20){alert("20자 이내로 입력해주세요.");return}
+ setN(v);title();
+}
+function install(){
+ if(document.getElementById("v29NameBtn"))return;
+ const b=document.createElement("button");
+ b.id="v29NameBtn";b.type="button";b.textContent="✏️ 도감 이름";
+ b.style.cssText="position:fixed;right:12px;bottom:12px;z-index:9998;padding:10px 12px;border:1px solid #ddd;border-radius:12px;background:#fff;font-weight:700;display:none";
+ b.onclick=editName;document.body.appendChild(b);
+ setInterval(()=>{
+   title();
+   const pb=document.getElementById("parentBtn");
+   b.style.display=pb&&/켜짐|🔓/.test(pb.textContent||"")?"block":"none";
+ },800);
+}
+window.v29SetChildName=editName;
+window.addEventListener("load",()=>setTimeout(install,400));
+})();
+</script>
 </body>
 </html>
