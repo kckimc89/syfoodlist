@@ -1214,48 +1214,7 @@ window.addEventListener("load",()=>setTimeout(installFinalUI,100));
 })();
 </script>
 
-<script>
-/* ===== V29 FINAL STABLE BOOT ===== */
-(function(){
-"use strict";
-async function boot(){
-  try{
-    const add=document.getElementById("addBtn");
-    const parent=document.getElementById("parentBtn");
-    const backup=document.getElementById("backupBtn");
 
-    if(add && typeof window.saveAdd==="function"){
-      add.onclick=e=>{e.preventDefault();window.saveAdd();};
-    }else if(add && typeof window.v28SaveAdd==="function"){
-      add.onclick=e=>{e.preventDefault();window.v28SaveAdd();};
-    }
-
-    if(parent && typeof window.parent==="function"){
-      parent.onclick=e=>{e.preventDefault();window.parent();};
-      window.updateParentButton && window.updateParentButton();
-    }
-
-    if(backup && typeof window.openBackupMenu==="function"){
-      backup.onclick=e=>{e.preventDefault();e.stopPropagation();window.openBackupMenu();};
-    }else if(backup && typeof window.exportV25Backup==="function"){
-      backup.onclick=e=>{e.preventDefault();window.exportV25Backup();};
-    }
-
-    if(typeof window.v28Init==="function"){
-      await window.v28Init();
-    }else if(typeof window.initV25==="function"){
-      await window.initV25();
-      if(typeof window.render==="function")await window.render();
-    }
-    if(typeof window.updateParentButton==="function")window.updateParentButton();
-  }catch(e){
-    console.error("V29 boot error",e);
-    alert("도감 초기화 중 문제가 발생했습니다. 페이지를 한 번 새로고침해 주세요.");
-  }
-}
-window.addEventListener("load",()=>setTimeout(boot,300));
-})();
-</script>
 
 
 
@@ -1273,6 +1232,82 @@ window.addEventListener("load",()=>setTimeout(boot,300));
       know:`${name}에는 여러 가지 재료가 들어갈 수 있어요. 같은 음식도 재료와 조리 방법에 따라 영양 성분이 달라질 수 있으니 재료를 살펴보면 좋아요.`
     };
   };
+})();
+</script>
+
+
+<script>
+/* ===== V29 FINAL REPAIR 3: restore the three top-level actions ===== */
+(function(){
+"use strict";
+
+function openNewFoodForm(){
+  const sheet=document.getElementById("sheet"), modal=document.getElementById("modal");
+  if(!sheet||!modal){alert("음식 등록 화면을 불러오지 못했습니다.");return;}
+  sheet.innerHTML=`
+    <h2>➕ 새로운 음식 발견</h2>
+    <div class="infoBox">아이 스스로 음식 이름과 주재료를 기록해 보세요. 사진은 지금 찍거나 나중에 등록할 수 있어요.</div>
+    <div class="field"><label>🍴 음식 이름</label>
+      <input id="a_name" type="text" autocomplete="off" placeholder="음식 이름을 입력하세요">
+    </div>
+    <div class="field"><label>🥕 주재료</label>
+      <input id="a_ing" type="text" autocomplete="off" placeholder="예: 밥, 김, 계란">
+    </div>
+    <div class="field"><label>📍 어디에서 먹었나요?</label>
+      <input id="a_place" type="text" placeholder="예: 집, 학교, 식당">
+    </div>
+    <div class="field"><label>😋 어떤 느낌이었나요?</label>
+      <input id="a_feel" type="text" placeholder="예: 달콤했어요">
+    </div>
+    <div class="field"><label>❤️ 다시 먹고 싶나요?</label>
+      <input id="a_again" type="text" placeholder="예: 네, 또 먹고 싶어요">
+    </div>
+    <div class="field"><label>✏️ 한마디</label>
+      <textarea id="a_memo" placeholder="음식에 대해 자유롭게 적어 보세요"></textarea>
+    </div>
+    <div class="field"><label>📷 음식 사진</label>
+      <input id="a_photo" type="file" accept="image/*" capture="environment">
+      <div class="small">사진은 없어도 됩니다. 나중에 음식 카드에서 등록할 수 있어요.</div>
+    </div>
+    <div class="actions">
+      <button type="button" id="v29NewFoodSave">등록하기</button>
+      <button type="button" class="alt" id="v29NewFoodCancel">취소</button>
+    </div>`;
+  modal.classList.add("show");
+  setTimeout(()=>document.getElementById("a_name")?.focus(),100);
+  document.getElementById("v29NewFoodCancel").onclick=()=>modal.classList.remove("show");
+  document.getElementById("v29NewFoodSave").onclick=async()=>{
+    try{
+      if(typeof window.v28SaveAdd==="function") await window.v28SaveAdd();
+      else if(typeof window.saveAdd==="function") await window.saveAdd();
+      else throw new Error("음식 등록 기능을 찾을 수 없습니다.");
+    }catch(e){console.error(e);alert("음식 등록 중 문제가 발생했습니다.\n"+(e.message||e));}
+  };
+}
+
+function toggleParentMode(){
+  const pin=prompt("부모님 모드 PIN을 입력하세요.");
+  if(pin===null)return;
+  if(pin!=="1234"){alert("PIN이 맞지 않아요.");return;}
+  // Do not call window.parent: browsers reserve window.parent for the
+  // containing window. Toggle the application's own state directly.
+  if(typeof parentMode!=="undefined") parentMode=!parentMode;
+  const b=document.getElementById("parentBtn");
+  if(b){
+    const on=(typeof parentMode!=="undefined")?parentMode:false;
+    b.textContent=on?"🔓 부모님 모드 · 켜짐":"🔒 부모님 모드 · 꺼짐";
+    b.setAttribute("aria-pressed",on?"true":"false");
+  }
+  if(typeof render==="function")render();
+}
+
+function wire(){
+  const add=document.getElementById("addBtn");
+  const parent=document.getElementById("parentBtn");
+  if(add) add.onclick=(e)=>{e.preventDefault();e.stopPropagation();openNewFoodForm();};
+  if(parent) parent.onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleParentMode();};
+}
+window.addEventListener("load",()=>setTimeout(wire,500));
 })();
 </script>
 
