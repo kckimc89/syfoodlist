@@ -1043,19 +1043,71 @@ async function v28Restore(file){
   if(!file)return;
   try{
     const p=JSON.parse(await file.text());
-    if(!p || p.app!=="어린이 음식도감" || !Array.isArray(p.foods))throw new Error("올바른 음식도감 백업 파일이 아닙니다.");
-    if(!confirm(`백업을 복원할까요?\n음식 ${p.foods.length}개 · 사진 ${p.foods.filter(f=>f.photo).length}개\n현재 데이터를 백업 데이터로 교체합니다.`))return;
-    const old=data;
-    const next=p.foods.map(f=>({...f,favorite:!!(f.favorite||f.fav)}));
+    if(!p || p.app!=="어린이 음식도감" || !Array.isArray(p.foods))
+      throw new Error("올바른 음식도감 백업 파일이 아닙니다.");
+
+    const backupPhotoCount=p.foods.filter(f=>f.photo&&String(f.photo).startsWith("data:")).length;
+
+    if(!confirm(`백업을 복원할까요?
+음식 ${p.foods.length}개 · 백업 사진 ${backupPhotoCount}개
+기존 음식·사진은 가능한 한 보존하면서 복원합니다.`))return;
+
+    const oldData=Array.isArray(data)?data.slice():[];
+    const oldById=new Map(oldData.map(f=>[String(f.id),f]));
+    const oldByName=new Map(oldData.map(f=>[String(f.name||"").trim(),f]));
+
+    const next=p.foods.map(f=>{
+      const old=oldById.get(String(f.id)) || oldByName.get(String(f.name||"").trim());
+      const copy={...f,favorite:!!(f.favorite||f.fav)};
+      if(!(copy.photo&&String(copy.photo).startsWith("data:")) && old?.photo) copy.photo=old.photo;
+      return copy;
+    });
+
     data=next;
-    // Write photos first. If a photo fails, keep its food but report the count.
-    let ok=0,fail=0;
-    for(const f of data){if(f.photo&&String(f.photo).startsWith("data:")){try{await v25PutPhoto(f.id,f.photo);f.photo="idb:"+f.id;ok++}catch(e){fail++}}}
-    if(typeof v25SaveCategories==="function"&&Array.isArray(p.categories))v25SaveCategories(p.categories);
-    if(!v28Save()){data=old;throw new Error("복원 후 음식 정보 저장에 실패했습니다.")}
+    let restored=0, kept=0, failed=0;
+
+    for(const f of data){
+      if(f.photo&&String(f.photo).startsWith("data:")){
+        try{
+          await v25PutPhoto(f.id,f.photo);
+          f.photo="idb:"+f.id;
+          restored++;
+        }catch(e){ failed++; }
+      }else if(f.photo&&String(f.photo).startsWith("idb:")){
+        try{
+          const existing=await v25GetStoredPhoto(f.id);
+          if(existing) kept++;
+          else{
+            const old=oldByName.get(String(f.name||"").trim());
+            if(old && old.id!==f.id && old.photo){
+              const oldSrc=await v25GetPhoto(old);
+              if(oldSrc){ await v25PutPhoto(f.id,oldSrc); kept++; }
+            }
+          }
+        }catch(e){}
+      }
+    }
+
+    if(typeof v25SaveCategories==="function" && Array.isArray(p.categories))
+      v25SaveCategories(p.categories);
+
+    if(!v28Save()){
+      data=oldData;
+      throw new Error("복원 후 음식 정보 저장에 실패했습니다.");
+    }
+
     await render();
-    alert(`복원 완료\n음식 ${data.length}개 · 사진 ${ok}개`+(fail?`\n사진 ${fail}개는 다시 등록해 주세요.`:""));
-  }catch(e){alert("복원에 실패했습니다.\n"+(e.message||e))}
+
+    alert(`복원 완료
+음식 ${data.length}개
+백업 사진 ${restored}개 복원 · 기존 사진 ${kept}개 유지${failed?` · 사진 ${failed}개 저장 실패`:""}
+
+※ 백업 파일 자체에 사진이 없었던 경우에는 그 사진을 새로 만들어낼 수 없습니다.
+기존 앱 저장소에 사진이 남아 있으면 가능한 한 유지합니다.`);
+  }catch(e){
+    console.error(e);
+    alert("백업 복원에 실패했습니다.\n"+(e.message||e));
+  }
 }
 function v28PickRestore(){const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.onchange=()=>v28Restore(i.files?.[0]);i.click()}
 function v28StorageStatus(){
@@ -1078,5 +1130,10 @@ window.addEventListener("load",()=>setTimeout(v28AddSafetyUI,500));
 window.addEventListener("load",()=>setTimeout(v28Init,650));
 </script>
 
+<div id="v28-origin-note" class="infoBox" style="margin-top:10px">
+<b>🔒 사진 보존 안내</b><br>
+앞으로 새 버전으로 교체할 때는 <b>같은 GitHub Pages 주소</b>의 <code>index.html</code>만 교체하세요.
+홈 화면에 추가한 아이콘도 같은 주소를 계속 사용해야 합니다.
+</div>
 </body>
 </html>
