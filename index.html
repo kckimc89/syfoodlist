@@ -552,7 +552,7 @@ function editFood(id){
  const f=data.find(x=>x.id===id);if(!f)return;
  openModal(`<h2>✏️ 부모님 설명 보완</h2>
  <div class="infoBox">👧 아이가 기록한 내용<br>장소: ${esc(f.place||"기록 없음")}<br>느낌: ${esc(f.feel||"기록 없음")}<br>다시 먹기: ${esc(f.again||"기록 없음")}<br>한마디: ${esc(f.memo||"기록 없음")}</div>
- <div class="field"><label>🍴 음식 이름</label><input id="e_name" value="${esc(f.name||"")}" placeholder="음식 이름을 입력하세요"><div class="small">음식 이름만 바꾸며 사진·즐겨찾기·설명·카테고리는 그대로 유지됩니다.</div></div>
+ <div class="field"><label>🍴 음식 이름</label><input id="e_name" value="${esc(f.name||"")}" placeholder="음식 이름을 입력하세요"><div class="small">음식 이름은 그대로 두셔도 됩니다. 이름을 바꾸지 않고 설명·주재료·만드는 방법·건강하게 먹는 법·알아두면 좋은 점·카테고리만 수정할 수 있습니다.</div></div>
  ${editField("e_desc","음식 설명",f.desc)}${editField("e_ing","주재료",f.ing)}${editField("e_how","어떻게 만들까요?",f.how)}${editField("e_health","건강하게 먹는 법",f.health)}${editField("e_tip","알아두면 좋은 점",f.tip)}
  <div class="field">
 <label>📂 카테고리</label>
@@ -1003,10 +1003,16 @@ function v28Save(){
 }
 
 async function v28SaveEdit(id){
-  const f=data.find(x=>x.id===id);if(!f)return;
+  const f=data.find(x=>String(x.id)===String(id));if(!f)return;
+  const originalName=String(f.name||"").trim();
   const name=(document.getElementById("e_name")?.value||"").trim();
-  if(!name){alert("음식 이름을 입력해 주세요.");return}
-  if(data.some(x=>x.id!==id && String(x.name||"").trim()===name)){alert("같은 이름의 음식이 이미 있습니다.");return}
+  if(!name){alert("음식 이름을 비워둘 수 없습니다. 기존 이름을 그대로 두셔도 됩니다.");return}
+  // 이름을 변경하지 않은 경우에는 중복검사를 하지 않습니다.
+  // 카테고리/설명 등 다른 항목만 수정해도 반드시 저장되어야 합니다.
+  if(name!==originalName){
+    const duplicate=data.some(x=>x!==f && String(x.name||"").trim()===name);
+    if(duplicate){alert("변경하려는 음식 이름이 이미 있습니다. 이름을 그대로 두고 다른 내용을 수정할 수도 있습니다.");return}
+  }
   f.name=name;
   f.desc=document.getElementById("e_desc")?.value.trim()||"";
   f.ing=document.getElementById("e_ing")?.value.trim()||"";

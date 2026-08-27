@@ -1,7 +1,7 @@
 {
   "name": "어린이 음식도감",
   "short_name": "음식도감",
-  "id": "/kids-food-book/",
+  "id": "./",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
