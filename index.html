@@ -537,7 +537,7 @@ function deleteFood(id){
 function backup(){
  const blob=new Blob([JSON.stringify(data)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="어린이음식도감_백업.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-$("addBtn").onclick=addFood;$("parentBtn").onclick=parent;$("backupBtn").onclick=exportV25Backup;initV25();
+/* V29 FINAL BOOT: handlers are bound after all extension scripts load. */
 
 /* ===== V25.1 PHOTO + CONTENT STABILITY PATCH ===== */
 const V251_DB_NAME="kids_food_photos_v25";
@@ -987,16 +987,45 @@ async function v28SaveEdit(id){
 }
 
 async function v28SaveAdd(){
-  const name=(document.getElementById("a_name")?.value||"").trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
-  if(data.some(x=>String(x.name||"").trim()===name)){alert("같은 이름의 음식이 이미 있습니다.");return}
-  const f={id:"u"+Date.now()+""+Math.random().toString(36).slice(2,6),name,cat:"미분류",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,favorite:false,place:document.getElementById("a_place")?.value||"",feel:document.getElementById("a_feel")?.value||"",again:document.getElementById("a_again")?.value||"",memo:document.getElementById("a_memo")?.value.trim()||""};
+  const name=(document.getElementById("a_name")?.value||"").trim();
+  if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
+  if(data.some(x=>String(x.name||"").trim()===name)){
+    alert("같은 이름의 음식이 이미 있습니다.");return;
+  }
+  const ing=(document.getElementById("a_ing")?.value||"").trim();
+  const draft=(typeof v29GenerateNewFoodDraft==="function")
+    ? await v29GenerateNewFoodDraft(name,ing)
+    : {desc:"",how:"",health:"",tip:""};
+  const f={
+    id:"u"+Date.now()+""+Math.random().toString(36).slice(2,6),
+    name,cat:"미분류",
+    desc:draft.desc||"",ing:ing,
+    how:draft.how||"",health:draft.health||"",tip:draft.tip||"",
+    photo:"",seen:true,fav:false,favorite:false,
+    place:document.getElementById("a_place")?.value||"",
+    feel:document.getElementById("a_feel")?.value||"",
+    again:document.getElementById("a_again")?.value||"",
+    memo:document.getElementById("a_memo")?.value.trim()||""
+  };
   const file=document.getElementById("a_photo")?.files?.[0];
+
   try{
+    /* 새 음식은 항상 기존 배열의 맨 뒤에 추가합니다. */
     data.push(f);
-    if(file){const d=await v251CompressImage(file,900,180000);await v25PutPhoto(f.id,d);f.photo="idb:"+f.id}
-    if(!v28Save()){throw new Error("저장공간 부족")}
-    closeModal();render();
-  }catch(e){data=data.filter(x=>x.id!==f.id);v28Save();alert("음식 등록에 실패했습니다. 기존 도감은 유지됩니다.\n"+(e.message||e))}
+    if(file){
+      const d=await v251CompressImage(file,900,180000);
+      await v25PutPhoto(f.id,d);
+      f.photo="idb:"+f.id;
+    }
+    if(!v28Save())throw new Error("저장공간 부족");
+    closeModal();
+    await render();
+  }catch(e){
+    data=data.filter(x=>x.id!==f.id);
+    v28Save();
+    console.error(e);
+    alert("음식 등록에 실패했습니다. 기존 도감은 유지됩니다.\n"+(e.message||e));
+  }
 }
 
 async function v28ToggleFavorite(id){
@@ -1182,6 +1211,49 @@ window.addEventListener("load",()=>setTimeout(installFinalUI,100));
 (function(){
  const V="V29-FINAL-EDU-1";
  try{localStorage.setItem("kids_food_book_last_program",V)}catch(e){}
+})();
+</script>
+
+<script>
+/* ===== V29 FINAL STABLE BOOT ===== */
+(function(){
+"use strict";
+async function boot(){
+  try{
+    const add=document.getElementById("addBtn");
+    const parent=document.getElementById("parentBtn");
+    const backup=document.getElementById("backupBtn");
+
+    if(add && typeof window.saveAdd==="function"){
+      add.onclick=e=>{e.preventDefault();window.saveAdd();};
+    }else if(add && typeof window.v28SaveAdd==="function"){
+      add.onclick=e=>{e.preventDefault();window.v28SaveAdd();};
+    }
+
+    if(parent && typeof window.parent==="function"){
+      parent.onclick=e=>{e.preventDefault();window.parent();};
+      window.updateParentButton && window.updateParentButton();
+    }
+
+    if(backup && typeof window.openBackupMenu==="function"){
+      backup.onclick=e=>{e.preventDefault();e.stopPropagation();window.openBackupMenu();};
+    }else if(backup && typeof window.exportV25Backup==="function"){
+      backup.onclick=e=>{e.preventDefault();window.exportV25Backup();};
+    }
+
+    if(typeof window.v28Init==="function"){
+      await window.v28Init();
+    }else if(typeof window.initV25==="function"){
+      await window.initV25();
+      if(typeof window.render==="function")await window.render();
+    }
+    if(typeof window.updateParentButton==="function")window.updateParentButton();
+  }catch(e){
+    console.error("V29 boot error",e);
+    alert("도감 초기화 중 문제가 발생했습니다. 페이지를 한 번 새로고침해 주세요.");
+  }
+}
+window.addEventListener("load",()=>setTimeout(boot,300));
 })();
 </script>
 </body>
