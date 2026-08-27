@@ -559,6 +559,202 @@ function backup(){
  const blob=new Blob([JSON.stringify(data)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="어린이음식도감_백업.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 $("addBtn").onclick=addFood;$("parentBtn").onclick=parent;$("backupBtn").onclick=exportV25Backup;initV25();
+
+/* ===== V25.1 PHOTO + CONTENT STABILITY PATCH ===== */
+const V251_DB_NAME="kids_food_photos_v25";
+
+async function v251PutPhoto(id,dataUrl){return v25PutPhoto(id,dataUrl)}
+async function v251GetPhoto(f){
+  if(!f)return "";
+  if(f.photo && String(f.photo).startsWith("idb:")){
+    try{return await v25GetStoredPhoto(f.id)}catch(e){return ""}
+  }
+  return (f.photo && String(f.photo).startsWith("data:")) ? f.photo : "";
+}
+function v251SafeSave(){
+  try{
+    const slim=data.map(f=>{const x={...f}; if(String(x.photo||"").startsWith("idb:")) x.photo=x.photo; else x.photo=""; return x});
+    localStorage.setItem(KEY,JSON.stringify(slim));
+    return true;
+  }catch(e){
+    console.error(e);
+    alert("음식 정보 저장에 실패했습니다. 사진은 별도 저장소에 보관되므로 사진 자체가 음식 데이터 저장공간을 차지하지 않도록 수정되었습니다.");
+    return false;
+  }
+}
+async function v251MigrateOldPhotos(){
+  let changed=false;
+  for(const f of data){
+    if(f.photo && String(f.photo).startsWith("data:")){
+      try{await v251PutPhoto(f.id,f.photo);f.photo="idb:"+f.id;changed=true}catch(e){console.warn("photo migration",f.id,e)}
+    }
+  }
+  if(changed)v251SafeSave();
+}
+
+function v251CompressImage(file,maxSide=900,maxBytes=180000){
+  return new Promise((resolve,reject)=>{
+    if(!file){reject(new Error("사진 파일이 없습니다."));return}
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("사진을 읽을 수 없습니다."));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("사진 형식을 읽을 수 없습니다."));
+      img.onload=()=>{
+        const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+        const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
+        const c=document.createElement("canvas");c.width=w;c.height=h;
+        const ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);
+        let q=.82;
+        const attempt=()=>c.toBlob(blob=>{
+          if(!blob){reject(new Error("사진 압축에 실패했습니다."));return}
+          if(blob.size<=maxBytes || q<=.28){
+            const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error("사진 변환에 실패했습니다."));r.readAsDataURL(blob)
+          }else{q-=.08;attempt()}
+        },"image/jpeg",q);
+        attempt();
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function v251StorePhoto(id,dataUrl){
+  await v251PutPhoto(id,dataUrl);
+  const f=data.find(x=>x.id===id);if(f)f.photo="idb:"+id;
+  if(!v251SafeSave())throw new Error("음식 정보 저장 실패");
+}
+
+async function handlePhotoFile(id,file){
+  if(!file)return;
+  try{
+    const dataUrl=await v251CompressImage(file,900,180000);
+    await v251StorePhoto(id,dataUrl);
+    render();
+    await detail(id);
+  }catch(e){console.error(e);alert("사진 등록에 실패했습니다. 사진을 자동으로 작게 만든 뒤 다시 저장하도록 수정되어 있습니다. 다시 시도해 주세요.");}
+}
+async function takePhoto(id){
+  const video=$("cameraVideo"),canvas=$("cameraCanvas");
+  if(!video||!video.videoWidth){alert("카메라가 아직 준비되지 않았습니다.");return}
+  let w=video.videoWidth,h=video.videoHeight,max=900;
+  if(w>max){h=Math.round(h*max/w);w=max}
+  canvas.width=w;canvas.height=h;canvas.getContext("2d").drawImage(video,0,0,w,h);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.82));
+  if(!blob){alert("사진 생성에 실패했습니다.");return}
+  try{
+    const file=new File([blob],"camera.jpg",{type:"image/jpeg"});
+    await handlePhotoFile(id,file);
+    stopCamera();
+  }catch(e){console.error(e);alert("사진 저장에 실패했습니다. 다시 촬영해 주세요.")}
+}
+async function saveEdit(id){
+  const f=data.find(x=>x.id===id);if(!f)return;
+  f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"미분류";
+  const file=$("e_photo")?.files?.[0];
+  try{
+    if(file) await v251StorePhoto(id,await v251CompressImage(file,900,180000));
+    else v251SafeSave();
+    render();await detail(id);
+  }catch(e){console.error(e);alert("저장 중 문제가 발생했습니다. 사진은 자동 압축되어 별도 저장됩니다. 다시 시도해 주세요.")}
+}
+async function saveAdd(){
+  const name=$("a_name").value.trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
+  const f={id:"u"+Date.now(),name,cat:"미분류",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,favorite:false,place:$("a_place").value,feel:$("a_feel").value,again:$("a_again").value,memo:$("a_memo").value.trim()};
+  const file=$("a_photo")?.files?.[0];
+  data.unshift(f);
+  try{
+    if(file) await v251StorePhoto(f.id,await v251CompressImage(file,900,180000));
+    else v251SafeSave();
+    closeModal();render();
+  }catch(e){data=data.filter(x=>x.id!==f.id);v251SafeSave();console.error(e);alert("음식을 저장하는 중 문제가 발생했습니다. 다시 시도해 주세요.")}
+}
+function deleteFood(id){
+  if(!confirm("이 음식을 도감에서 삭제할까요?"))return;
+  const old=data.find(f=>f.id===id);data=data.filter(f=>f.id!==id);v251SafeSave();
+  if(old) v25DeletePhoto(old.id).catch(()=>{});
+  closeModal();render();
+}
+
+/* Starter-food knowledge: fill only fields that are currently empty. */
+const V251_KNOWLEDGE={
+"라면":["밀가루로 만든 면과 국물 또는 양념을 함께 먹는 음식이에요.","면, 스프, 물 등이 기본이고 달걀·채소 등을 넣기도 해요.","물을 끓인 뒤 면과 스프를 넣고 익혀요.","국물에는 나트륨이 많을 수 있어 국물은 적당히 먹고 채소나 달걀을 곁들이면 좋아요.","뜨거운 국물은 식혀서 먹고, 면이 아주 뜨거울 때는 천천히 먹어요."],
+"우동":["두꺼운 밀가루 면을 따뜻한 국물이나 양념과 함께 먹는 음식이에요.","우동면, 국물, 어묵, 파 등이 자주 들어가요.","면을 익힌 뒤 따뜻한 국물과 함께 담아 먹어요.","국물의 나트륨이 높을 수 있으므로 국물은 적당히 먹어요.","면의 굵기와 국물의 맛을 비교해 보세요."],
+"칼국수":["밀가루 반죽을 칼로 썰어 만든 넓은 면을 국물에 끓여 먹는 음식이에요.","밀가루, 물, 국물, 채소, 바지락이나 닭고기 등이 쓰여요.","반죽을 얇게 밀고 썰어 국물에 넣어 익혀요.","채소와 단백질 재료를 함께 먹으면 식사를 더 균형 있게 할 수 있어요.","면의 모양이 칼로 썬 것처럼 보여요."],
+"냉면":["차갑게 식힌 국물이나 양념에 면을 넣어 먹는 음식이에요.","메밀이나 전분으로 만든 면, 육수 또는 양념, 오이, 달걀 등이 들어가요.","면을 삶아 찬물에 헹군 뒤 차가운 육수나 양념과 함께 먹어요.","양념과 육수에 나트륨이 있을 수 있어 적당히 먹어요.","차가운 음식이라 면의 식감이 쫄깃하게 느껴질 수 있어요."],
+"국수":["가늘고 긴 면을 국물이나 양념과 함께 먹는 음식이에요.","밀가루 면, 육수, 채소, 달걀, 고기나 김 등이 들어갈 수 있어요.","면을 삶아 국물이나 양념과 함께 담아 먹어요.","채소와 단백질 재료를 함께 넣으면 다양한 영양소를 섭취할 수 있어요.","국수는 지역과 조리법에 따라 모양과 맛이 다양해요."],
+"김치볶음밥":["밥과 김치를 함께 볶아 만든 음식이에요.","밥, 김치, 식용유, 달걀, 파 등이 자주 쓰여요.","재료를 볶다가 밥을 넣고 골고루 섞어 볶아요.","김치와 양념에 나트륨이 있을 수 있어 다른 반찬은 싱겁게 먹는 것이 좋아요.","김치의 익은 정도에 따라 맛이 달라져요."],
+"볶음밥":["밥과 여러 재료를 기름에 볶아 만든 음식이에요.","밥, 달걀, 채소, 고기나 햄 등이 들어갈 수 있어요.","재료를 볶은 뒤 밥을 넣고 함께 볶아요.","채소와 단백질 재료를 골고루 넣으면 더 균형 잡힌 한 끼가 될 수 있어요.","남은 밥과 여러 재료를 활용하기 좋은 음식이에요."],
+"비빔밥":["밥에 여러 나물과 재료를 올리고 양념과 함께 비벼 먹는 음식이에요.","밥, 나물, 채소, 달걀, 고기, 고추장 등이 들어갈 수 있어요.","밥 위에 재료를 올리고 양념을 넣어 골고루 비벼 먹어요.","여러 채소와 단백질 재료를 함께 먹을 수 있는 음식이에요.","재료를 섞기 전 각각의 색과 모양을 살펴보세요."],
+"주먹밥":["밥을 여러 재료와 섞거나 속을 넣고 손으로 뭉쳐 만든 음식이에요.","밥, 김, 참치, 채소, 깨 등이 사용될 수 있어요.","재료를 밥과 섞거나 속을 넣고 먹기 좋은 크기로 뭉쳐요.","채소와 단백질 재료를 함께 넣으면 영양을 보완할 수 있어요.","손으로 모양을 만들 수 있어 아이가 음식 만들기를 경험하기 좋아요."],
+"불고기":["얇게 썬 고기를 양념해 볶거나 구워 먹는 음식이에요.","소고기, 간장, 배나 설탕, 마늘, 양파 등이 쓰일 수 있어요.","고기를 양념한 뒤 팬이나 불에 익혀요.","고기와 함께 채소를 먹고 양념은 적당히 먹어요.","지역과 조리법에 따라 국물이 많은 불고기와 구이식 불고기가 있어요."],
+"삼겹살":["돼지고기의 삼겹살 부위를 구워 먹는 음식이에요.","돼지고기 삼겹살, 상추, 마늘, 김치 등이 곁들여질 수 있어요.","고기를 팬이나 불판에서 충분히 익혀 먹어요.","기름기가 많은 부위이므로 채소와 함께 적당량 먹는 것이 좋아요.","고기는 속까지 충분히 익혀 먹어요."],
+"갈비":["갈비뼈 주변의 고기를 양념하거나 구워 먹는 음식이에요.","소갈비 또는 돼지갈비, 간장 양념, 마늘, 파 등이 쓰일 수 있어요.","양념한 고기를 굽거나 찌는 등 여러 방법으로 익혀요.","양념에 당류와 나트륨이 있을 수 있으므로 적당히 먹어요.","뼈가 있는 음식은 살을 발라 먹고 작은 뼈가 남지 않았는지 살펴요."],
+"제육볶음":["양념한 돼지고기를 채소와 함께 볶아 먹는 음식이에요.","돼지고기, 고추장 또는 고춧가루, 양파, 파 등이 들어가요.","돼지고기와 채소에 양념을 넣어 팬에서 볶아요.","채소를 함께 먹고 매운 양념은 아이에게 맞는 양으로 조절해요.","매운맛은 고춧가루나 고추장의 양에 따라 달라져요."],
+"닭갈비":["닭고기와 채소를 매콤한 양념에 볶아 먹는 음식이에요.","닭고기, 양배추, 고구마, 떡, 고추장 양념 등이 쓰일 수 있어요.","재료를 양념해 팬에서 함께 볶아 익혀요.","채소를 함께 먹고 매운 양념과 나트륨은 적당히 섭취해요.","닭고기는 속까지 충분히 익혀야 해요."],
+"치킨":["닭고기를 튀기거나 구워 만든 음식이에요.","닭고기, 튀김옷, 식용유 또는 양념 등이 사용돼요.","닭고기를 양념하거나 튀김옷을 입힌 뒤 튀기거나 구워요.","튀긴 치킨은 지방과 열량이 높을 수 있어 채소와 함께 적당히 먹어요.","뼈가 있는 치킨은 작은 뼈를 조심해요."],
+"피자":["밀가루 반죽 위에 소스와 치즈, 여러 재료를 올려 구운 음식이에요.","도우, 토마토소스, 치즈, 채소, 고기 등이 들어갈 수 있어요.","도우에 재료를 올리고 오븐에서 구워요.","치즈와 가공육이 많이 들어간 피자는 나트륨과 지방이 높을 수 있어요.","한 조각에 어떤 재료가 들어 있는지 찾아보세요."],
+"햄버거":["빵 사이에 고기 패티와 채소 등을 넣어 먹는 음식이에요.","빵, 소고기나 닭고기 패티, 양상추, 토마토, 치즈, 소스 등이 들어갈 수 있어요.","패티를 익힌 뒤 빵과 채소, 소스를 함께 담아요.","채소를 함께 먹고 소스와 가공육은 적당히 먹어요.","빵과 속재료의 색과 모양을 관찰해 보세요."],
+"핫도그":["소시지를 빵에 넣거나 튀김옷을 입혀 튀겨 먹는 음식이에요.","소시지, 빵, 밀가루 반죽, 케첩 등이 쓰일 수 있어요.","소시지를 익혀 빵에 넣거나 반죽을 입혀 튀겨요.","소시지는 나트륨이 높을 수 있어 자주 많이 먹기보다는 적당히 먹어요.","뜨거운 소시지는 식혀서 먹어요."],
+"오므라이스":["볶음밥을 달걀로 감싸거나 덮어 먹는 음식이에요.","밥, 달걀, 양파, 당근, 햄이나 닭고기, 케첩 등이 들어갈 수 있어요.","재료와 밥을 볶은 뒤 달걀을 익혀 밥을 감싸요.","채소와 단백질 재료를 함께 넣으면 좋아요.","달걀을 어떻게 감쌌는지 살펴보세요."],
+"카레":["카레 향신료를 넣은 소스를 밥이나 면과 함께 먹는 음식이에요.","감자, 당근, 양파, 고기, 카레가루 등이 자주 쓰여요.","재료를 볶고 물과 카레가루를 넣어 걸쭉하게 끓여요.","채소를 충분히 넣고 소스는 적당량 먹어요.","같은 카레라도 재료에 따라 색과 맛이 달라져요."],
+"돈가스":["고기에 빵가루를 입혀 바삭하게 튀기거나 구워 만든 음식이에요.","돼지고기 또는 다른 고기, 밀가루, 달걀, 빵가루 등이 쓰여요.","고기에 튀김옷을 입힌 뒤 기름에 튀기거나 오븐 등에서 익혀요.","샐러드나 채소와 함께 먹고 튀김옷과 소스는 적당히 먹어요.","고기의 종류와 튀김옷의 바삭한 식감을 관찰해 보세요."],
+"생선구이":["생선을 소금 등으로 간해 구워 먹는 음식이에요.","고등어, 조기, 연어 등 여러 생선과 소금 등이 쓰일 수 있어요.","손질한 생선을 팬이나 오븐, 불에서 충분히 익혀요.","생선에는 단백질과 지방이 들어 있으며 종류에 따라 영양이 달라요.","가시가 있을 수 있으니 천천히 살펴 먹어요."],
+"김치찌개":["김치와 여러 재료를 넣고 끓여 만든 찌개예요.","김치, 두부, 돼지고기, 양파, 파 등이 들어갈 수 있어요.","재료와 김치를 국물에 넣고 충분히 끓여요.","김치와 국물에 나트륨이 있을 수 있어 국물은 적당히 먹어요.","김치가 익을수록 찌개의 맛이 달라질 수 있어요."],
+"된장찌개":["된장을 풀고 채소와 두부 등을 넣어 끓인 찌개예요.","된장, 두부, 애호박, 감자, 양파 등이 들어갈 수 있어요.","국물에 된장과 재료를 넣고 끓여요.","된장에는 나트륨이 있으므로 국물은 적당히 먹어요.","된장은 콩을 발효해 만든 식품이에요."],
+"미역국":["미역을 국물에 끓여 만든 우리나라의 대표적인 국이에요.","미역, 소고기 또는 조개류, 참기름, 국간장 등이 쓰일 수 있어요.","불린 미역을 볶거나 끓인 뒤 국물을 넣어 익혀요.","미역과 함께 단백질 재료를 먹을 수 있어요.","미역은 물에 불리면 부피가 크게 늘어나요."],
+"떡국":["얇게 썬 떡을 국물에 넣어 끓여 먹는 음식이에요.","떡, 육수, 달걀, 파, 소고기나 김 등이 들어갈 수 있어요.","떡을 국물에 넣고 부드러워질 때까지 끓여요.","국물의 나트륨을 고려해 국물은 적당히 먹어요.","떡은 끈적하고 뜨거울 수 있으니 작게 잘라 천천히 먹어요."],
+"만두":["얇은 만두피에 고기나 채소 등을 넣고 빚어 익힌 음식이에요.","밀가루 만두피, 돼지고기나 소고기, 두부, 채소 등이 들어갈 수 있어요.","빚은 만두를 찌거나 삶거나 굽거나 튀겨요.","만두 종류에 따라 나트륨과 지방 함량이 달라질 수 있어요.","만두피와 속재료를 나누어 관찰해 보세요."],
+"순대":["돼지 창자 등에 당면이나 채소 등의 속을 넣어 익힌 음식이에요.","당면, 돼지 창자, 채소, 돼지 피 등이 사용될 수 있어요.","속재료를 채운 뒤 쪄서 익혀 먹어요.","제품과 조리법에 따라 나트륨과 지방이 달라질 수 있어요.","뜨거운 순대는 식혀서 먹어요."],
+"튀김":["재료에 튀김옷을 입혀 기름에 익힌 음식이에요.","새우, 오징어, 고구마, 채소 등 다양한 재료가 사용돼요.","재료에 반죽을 입혀 뜨거운 기름에서 익혀요.","기름을 많이 사용하는 조리법이므로 채소와 함께 적당히 먹어요.","같은 튀김옷이라도 재료에 따라 색과 모양이 달라요."],
+"어묵":["생선살 등을 갈아 반죽한 뒤 익혀 만든 식품이에요.","생선살, 전분, 소금, 채소 등이 들어갈 수 있어요.","반죽을 모양 내어 튀기거나 굽거나 찌는 등 여러 방법으로 익혀요.","가공식품이라 나트륨이 높을 수 있어 적당히 먹어요.","어묵은 모양이 매우 다양해요."],
+"붕어빵":["붕어 모양 틀에 반죽과 팥소 등을 넣어 구운 간식이에요.","밀가루 반죽, 팥앙금, 설탕 등이 들어갈 수 있어요.","틀에 반죽과 속을 넣고 앞뒤로 구워요.","달콤한 간식이므로 적당량 먹고 다른 음식과 균형을 맞춰요.","모양은 물고기지만 생선이 들어간 음식은 아니에요."],
+"호떡":["밀가루 반죽 안에 달콤한 속을 넣고 눌러 구운 간식이에요.","밀가루, 설탕, 견과류나 씨앗 등이 사용될 수 있어요.","반죽 안에 속을 넣고 팬에서 눌러 구워요.","당류와 열량이 높을 수 있어 간식으로 적당히 먹어요.","속이 매우 뜨거울 수 있으니 충분히 식혀 먹어요."],
+"토스트":["빵을 구워 달걀이나 채소, 치즈 등을 곁들여 먹는 음식이에요.","식빵, 달걀, 채소, 치즈, 햄 등이 들어갈 수 있어요.","빵과 속재료를 굽거나 익혀 함께 먹어요.","채소와 달걀을 함께 넣으면 한 끼 식사로 다양하게 구성할 수 있어요.","빵을 구우면 겉이 바삭해지고 색이 진해져요."],
+"샌드위치":["빵 사이에 채소, 고기, 달걀, 치즈 등을 넣어 먹는 음식이에요.","빵, 채소, 달걀, 햄, 닭고기, 치즈 등이 들어갈 수 있어요.","재료를 준비해 빵 사이에 차곡차곡 넣어요.","채소와 단백질 재료를 함께 넣으면 균형 잡힌 구성이 될 수 있어요.","빵 사이에 들어간 재료를 하나씩 찾아보세요."],
+"계란말이":["달걀을 풀어 팬에서 여러 번 말아 익힌 반찬이에요.","달걀, 소금, 파, 당근, 치즈 등이 들어갈 수 있어요.","달걀물을 얇게 부어 익힌 뒤 조금씩 말아가며 만들어요.","달걀은 단백질을 제공하는 식품이에요.","단면을 잘라 보면 여러 겹의 모양을 볼 수 있어요."],
+"두부":["콩으로 만든 부드러운 식품으로 찌개나 반찬 등에 다양하게 사용돼요.","콩과 물이 기본 재료예요.","콩을 갈아 만든 두유를 굳혀 두부를 만들어요.","두부는 단백질을 제공하는 식품으로 다양한 음식에 활용할 수 있어요.","부드러운 식감과 담백한 맛이 특징이에요."],
+"잡채":["당면과 채소, 고기 등을 볶아 만든 음식이에요.","당면, 시금치, 당근, 양파, 버섯, 고기 등이 들어갈 수 있어요.","재료를 각각 익힌 뒤 당면과 양념을 넣어 함께 섞어요.","여러 채소와 단백질 재료가 함께 들어갈 수 있어요.","여러 색깔의 재료를 찾아보면 재미있어요."],
+"김치":["채소에 양념을 넣어 발효시킨 우리나라의 대표적인 음식이에요.","배추, 무, 고춧가루, 마늘, 젓갈 등이 종류에 따라 사용돼요.","채소를 절이고 양념한 뒤 일정 기간 발효시켜 만들어요.","나트륨이 많을 수 있으므로 적당량 먹어요.","시간이 지나면서 맛과 향이 달라질 수 있어요."],
+"김":["바다에서 나는 해조류를 말리고 구워 밥과 함께 먹는 음식이에요.","김, 소금, 참기름 등이 사용될 수 있어요.","김을 말린 뒤 굽거나 양념해 먹어요.","김에는 여러 미량 영양소가 들어 있지만 양념김은 나트륨이 높을 수 있어요.","김은 얇고 바삭하지만 국물에 넣으면 부드러워져요."],
+"옥수수":["알갱이를 먹는 대표적인 곡식으로 찌거나 삶아 먹기도 해요.","옥수수가 기본 재료예요.","껍질을 벗겨 삶거나 찌고, 굽거나 다른 음식에 넣기도 해요.","탄수화물과 식이섬유 등을 제공하는 식품이에요.","옥수수 알갱이는 줄지어 붙어 있어요."],
+"고구마":["달콤하고 포근한 맛이 나는 뿌리채소예요.","고구마가 기본 재료예요.","굽거나 찌거나 삶아서 먹어요.","식이섬유가 들어 있어 포만감을 주는 데 도움이 될 수 있어요.","껍질 색과 속의 색이 품종에 따라 달라요."],
+"감자튀김":["감자를 길쭉하게 썰어 기름에 튀겨 만든 음식이에요.","감자, 식용유, 소금 등이 사용돼요.","감자를 썰어 기름에 튀기고 소금 등을 뿌려 먹어요.","튀김은 지방과 열량이 높을 수 있으므로 적당히 먹어요.","감자의 모양과 굵기에 따라 바삭한 정도가 달라질 수 있어요."]
+};
+function v251FillKnowledge(){
+  let changed=false;
+  data.forEach(f=>{
+    const k=V251_KNOWLEDGE[f.name];if(!k)return;
+    const fields=["desc","ing","how","health","tip"];
+    fields.forEach((key,i)=>{if(!String(f[key]||"").trim()){f[key]=k[i];changed=true}});
+  });
+  if(changed)v251SafeSave();
+}
+
+async function render(){
+  renderFilters();
+  let list=category==="전체"?data:category==="__FAVORITES__"?data.filter(f=>!!f.favorite):data.filter(f=>(f.cat||"미분류")===category);
+  const q=(document.getElementById("v25SearchInput")?.value||"").trim().toLowerCase();
+  if(q)list=list.filter(f=>[f.name,f.ing,f.desc,f.tip,f.health,f.how].some(v=>String(v||"").toLowerCase().includes(q)));
+  $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')"><button type="button" class="favStar" onclick="event.stopPropagation();toggleFavorite('${f.id}')">${f.favorite?"⭐":"☆"}</button><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
+  for(const f of list){
+    if(!f.photo)continue;
+    try{const src=await v251GetPhoto(f);const el=document.getElementById("pic-"+f.id);if(el&&src)el.innerHTML=`<img src="${src}" alt="${esc(f.name)}" loading="lazy">`;}catch(e){console.warn("photo render",f.id,e)}
+  }
+}
+async function detail(id){
+  const f=data.find(x=>x.id===id);if(!f)return;
+  const src=await v251GetPhoto(f);
+  openModal(`<div>${src?`<img class="detailPhoto" src="${src}" alt="${esc(f.name)}">`:`<div class="pic" style="height:220px;border-radius:18px">🍴</div>`}</div><div class="learn"><h3>${esc(f.name)}</h3>${f.place||f.feel||f.again||f.memo?`<div class="learnbox"><b>👧 내가 기록한 이야기</b><br>📍 ${esc(f.place||"기록 없음")}<br>😋 ${esc(f.feel||"기록 없음")}<br>❤️ 다시 먹기: ${esc(f.again||"기록 없음")}<br>✏️ ${esc(f.memo||"기록 없음")}</div>`:""}${section("음식 설명",f.desc||"아직 부모님 설명이 없어요.")}${section("주재료",f.ing||"아직 알려주지 않았어요.")}${section("어떻게 만들까요?",f.how||"아직 알려주지 않았어요.")}${section("건강하게 먹는 법",f.health||"아직 알려주지 않았어요.")}${section("💡 알아두면 좋은 점",f.tip||"아직 알려주지 않았어요.")}</div><div class="actions"><button onclick="photoForFood('${f.id}')">📷 ${f.photo?"사진 바꾸기":"사진 등록"}</button>${parentMode?`<button onclick="editFood('${f.id}')">✏️ 부모님 설명 수정</button><button class="danger" onclick="deleteFood('${f.id}')">🗑️ 삭제</button>`:""}<button class="alt" onclick="closeModal()">닫기</button></div>`);
+}
+async function initV25(){
+  try{await v251MigrateOldPhotos()}catch(e){console.warn("photo migration failed",e)}
+  v251FillKnowledge();
+  data=data.map(f=>({...f,favorite:!!(f.favorite||f.fav)}));
+  v251SafeSave();
+  await render();
+}
+/* ===== END V25.1 PATCH ===== */
 </script>
 </body>
 </html>
