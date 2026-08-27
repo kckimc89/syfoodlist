@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V28</title>
+<title>어린이 음식도감 V29</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -52,6 +52,13 @@ button{font-size:16px;padding:14px 10px}
 .actions button{font-size:16px;min-height:50px}
 .empty{font-size:17px}
 .catRow{display:flex;gap:7px;align-items:center;padding:10px;border:1px solid #ddd;border-radius:12px;background:#fafafa}.favStar{position:absolute;right:8px;top:8px;z-index:5;border:0;background:rgba(255,255,255,.95);border-radius:50%;font-size:24px;width:40px;height:40px}</style>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="어린이 음식도감">
+<link rel="apple-touch-icon" href="icon-192.png">
+
 </head>
 <body>
 <header>
@@ -913,12 +920,12 @@ window.addEventListener("load",()=>setTimeout(v27StorageStatus,500));
 </script>
 
 <script>
-/* ===== V28 DATA-PRESERVATION LAYER =====
+/* ===== V29 DATA-PRESERVATION LAYER =====
    Do not change the existing V25 IndexedDB database name. This is deliberate:
    existing V25/V26/V27 photos remain in the same database on the same origin.
 */
-const V28_SHADOW_KEY="kids_food_v28_shadow";
-const V28_VERSION="V28";
+const V29_SHADOW_KEY="kids_food_v28_shadow";
+const V29_VERSION="V29";
 
 function v28CloneFoods(){
   return JSON.parse(JSON.stringify(Array.isArray(data)?data:[]));
@@ -930,12 +937,12 @@ function v28WriteShadow(){
       if(x.photo && String(x.photo).startsWith("data:")) x.photo="idb:"+x.id;
       return x;
     });
-    localStorage.setItem(V28_SHADOW_KEY,JSON.stringify(slim));
+    localStorage.setItem(V29_SHADOW_KEY,JSON.stringify(slim));
     return true;
-  }catch(e){console.warn("V28 shadow save failed",e);return false}
+  }catch(e){console.warn("V29 shadow save failed",e);return false}
 }
 function v28ReadShadow(){
-  try{const x=JSON.parse(localStorage.getItem(V28_SHADOW_KEY)||"[]");return Array.isArray(x)?x:[]}catch(e){return []}
+  try{const x=JSON.parse(localStorage.getItem(V29_SHADOW_KEY)||"[]");return Array.isArray(x)?x:[]}catch(e){return []}
 }
 async function v28RecoverIfPrimaryEmpty(){
   if(Array.isArray(data)&&data.length) return false;
@@ -953,7 +960,7 @@ async function v28MigrateAllInlinePhotos(){
         await v25PutPhoto(f.id,f.photo);
         f.photo="idb:"+f.id;
         changed=true; migrated++;
-      }catch(e){console.warn("V28 photo migration failed",f.id,e)}
+      }catch(e){console.warn("V29 photo migration failed",f.id,e)}
     }
   }
   if(changed && typeof v251SafeSave==="function")v251SafeSave();
@@ -977,7 +984,7 @@ function v28Save(){
   try{
     const slim=data.map(f=>{const x={...f};if(String(x.photo||"").startsWith("data:"))x.photo="idb:"+x.id;return x});
     localStorage.setItem(KEY,JSON.stringify(slim));
-    localStorage.setItem(V28_SHADOW_KEY,JSON.stringify(slim));
+    localStorage.setItem(V29_SHADOW_KEY,JSON.stringify(slim));
     return true;
   }catch(e){alert("음식 정보 저장에 실패했습니다. 사진은 별도 저장소에 보관됩니다.\n저장공간을 확인해 주세요.");return false}
 }
@@ -1033,9 +1040,9 @@ async function v28Backup(){
       let photo="";try{photo=await v25GetPhoto(f)}catch(e){}
       foods.push({...f,photo});
     }
-    const payload={app:"어린이 음식도감",version:V28_VERSION,createdAt:new Date().toISOString(),origin:location.origin,foods,categories:v25GetCategories()};
+    const payload={app:"어린이 음식도감",version:V29_VERSION,createdAt:new Date().toISOString(),origin:location.origin,foods,categories:v25GetCategories()};
     const blob=new Blob([JSON.stringify(payload)],{type:"application/json"});
-    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`어린이음식도감_V28_백업_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`어린이음식도감_V29_백업_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     alert(`백업 완료\n음식 ${foods.length}개 · 사진 ${foods.filter(f=>f.photo).length}개`);
   }catch(e){alert("백업에 실패했습니다.\n"+(e.message||e))}
 }
@@ -1112,21 +1119,21 @@ async function v28Restore(file){
 function v28PickRestore(){const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.onchange=()=>v28Restore(i.files?.[0]);i.click()}
 function v28StorageStatus(){
   const el=document.getElementById("v27StorageStatus");if(!el)return;
-  const fav=data.filter(f=>!!f.favorite).length;el.textContent=`V28 · 음식 ${data.length}개 · ⭐ ${fav}개`;
+  const fav=data.filter(f=>!!f.favorite).length;el.textContent=`V29 · 음식 ${data.length}개 · ⭐ ${fav}개`;
 }
 function v28AddSafetyUI(){
   if(document.getElementById("v28SafetyBox"))return;
   const host=document.querySelector(".wrap")||document.body;
   const box=document.createElement("div");box.id="v28SafetyBox";box.className="infoBox";
-  box.innerHTML=`<b>🛡️ V28 데이터 안전관리</b><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" onclick="v28Backup()">💾 전체 백업</button><button type="button" class="alt" onclick="v28PickRestore()">📥 백업 복원</button></div><div style="margin-top:6px">프로그램을 업데이트해도 같은 홈페이지 주소를 사용하면 음식·사진 저장소를 그대로 사용합니다. 중요한 사진이 많다면 업데이트 전 전체 백업을 권장합니다.</div>`;
+  box.innerHTML=`<b>🛡️ V29 데이터 안전관리</b><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" onclick="v28Backup()">💾 전체 백업</button><button type="button" class="alt" onclick="v28PickRestore()">📥 백업 복원</button></div><div style="margin-top:6px">프로그램을 업데이트해도 같은 홈페이지 주소를 사용하면 음식·사진 저장소를 그대로 사용합니다. 중요한 사진이 많다면 업데이트 전 전체 백업을 권장합니다.</div>`;
   host.insertBefore(box,host.firstChild);
 }
 
-// Use the V28 handlers from now on.
+// Use the V29 handlers from now on.
 window.saveEdit=v28SaveEdit;window.saveAdd=v28SaveAdd;window.toggleFavorite=v28ToggleFavorite;window.deleteFood=v28DeleteFood;
 window.exportV25Backup=v28Backup;window.importV25Backup=v28Restore;
 window.addEventListener("load",()=>setTimeout(v28AddSafetyUI,500));
-// Re-run initialization after all V28 overrides are defined.
+// Re-run initialization after all V29 overrides are defined.
 window.addEventListener("load",()=>setTimeout(v28Init,650));
 </script>
 
@@ -1135,5 +1142,209 @@ window.addEventListener("load",()=>setTimeout(v28Init,650));
 앞으로 새 버전으로 교체할 때는 <b>같은 GitHub Pages 주소</b>의 <code>index.html</code>만 교체하세요.
 홈 화면에 추가한 아이콘도 같은 주소를 계속 사용해야 합니다.
 </div>
+
+<script>
+/* ===== V29 DATA-SAFE CORE ===== */
+(function(){
+"use strict";
+const V29 = {
+  DB: "KidsFoodBookV29",
+  STORE: "photos",
+  DATA_KEY: "kids_food_book_v29_data",
+  CAT_KEY: "kids_food_book_v29_categories",
+  META_KEY: "kids_food_book_v29_meta"
+};
+
+function v29OpenDB(){
+  return new Promise((resolve,reject)=>{
+    const r=indexedDB.open(V29.DB,1);
+    r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains(V29.STORE)) db.createObjectStore(V29.STORE); };
+    r.onsuccess=()=>resolve(r.result);
+    r.onerror=()=>reject(r.error);
+  });
+}
+function v29PutPhoto(key,blob){
+  return v29OpenDB().then(db=>new Promise((resolve,reject)=>{
+    const tx=db.transaction(V29.STORE,"readwrite");
+    tx.objectStore(V29.STORE).put(blob,String(key));
+    tx.oncomplete=()=>{db.close();resolve(true)};
+    tx.onerror=()=>{db.close();reject(tx.error)};
+  }));
+}
+function v29GetPhoto(key){
+  return v29OpenDB().then(db=>new Promise((resolve,reject)=>{
+    const tx=db.transaction(V29.STORE,"readonly");
+    const r=tx.objectStore(V29.STORE).get(String(key));
+    r.onsuccess=()=>{const v=r.result; db.close(); resolve(v||null)};
+    r.onerror=()=>{db.close();reject(r.error)};
+  }));
+}
+function v29AllPhotos(){
+  return v29OpenDB().then(db=>new Promise((resolve,reject)=>{
+    const tx=db.transaction(V29.STORE,"readonly");
+    const s=tx.objectStore(V29.STORE), out=[];
+    const r=s.openCursor();
+    r.onsuccess=e=>{const c=e.target.result;if(!c){db.close();resolve(out);return}out.push({key:String(c.key),blob:c.value});c.continue()};
+    r.onerror=()=>{db.close();reject(r.error)};
+  }));
+}
+async function v29Persist(){
+  if(!navigator.storage) return {supported:false,persisted:false};
+  let persisted=false;
+  try{ if(navigator.storage.persisted) persisted=await navigator.storage.persisted(); }catch(_){}
+  if(!persisted && navigator.storage.persist) try{persisted=await navigator.storage.persist();}catch(_){}
+  return {supported:true,persisted};
+}
+async function v29Estimate(){
+  if(navigator.storage?.estimate) return await navigator.storage.estimate();
+  return {};
+}
+function v29ReadFoods(){
+  try{
+    const raw=localStorage.getItem(V29.DATA_KEY);
+    return raw?JSON.parse(raw):[];
+  }catch(_){return []}
+}
+function v29WriteFoods(foods){
+  localStorage.setItem(V29.DATA_KEY,JSON.stringify(foods));
+}
+function v29BlobURL(blob){return URL.createObjectURL(blob)}
+function v29Download(blob,name){
+  const u=URL.createObjectURL(blob), a=document.createElement("a");
+  a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),3000);
+}
+
+/* Export a real ZIP if CompressionStream is available. Otherwise export a JSON
+   manifest plus individual images through a downloadable HTML package notice.
+   The app remains usable on iPad Safari/Home Screen without external libraries. */
+async function v29Backup(){
+  const foods=v29ReadFoods();
+  const photos=await v29AllPhotos();
+  const photoMap={};
+  for(const p of photos){
+    const ext=(p.blob.type||"image/jpeg").includes("png")?"png":(p.blob.type||"").includes("webp")?"webp":"jpg";
+    photoMap[p.key]={name:`photos/${p.key}.${ext}`,type:p.blob.type||"image/jpeg"};
+  }
+  const meta={
+    app:"어린이 음식도감",version:"V29",format:"V29-BACKUP-1",
+    origin:location.origin,createdAt:new Date().toISOString(),
+    foods,photoMap,categories:(localStorage.getItem(V29.CAT_KEY)||"[]")
+  };
+  const metaBlob=new Blob([JSON.stringify(meta)],{type:"application/json"});
+  /* Use a single JSON with base64 only when necessary. This is intentionally
+     avoided for large photo collections; instead package images as a ZIP when
+     CompressionStream is available. */
+  if(typeof CompressionStream==="function"){
+    const files=[{name:"manifest.json",blob:metaBlob},...photos.map(p=>({name:photoMap[p.key].name,blob:p.blob}))];
+    const zip=await v29MakeZip(files);
+    v29Download(zip,`어린이음식도감_V29_백업_${new Date().toISOString().slice(0,10)}.zip`);
+    alert(`백업 완료\n음식 ${foods.length}개 · 사진 ${photos.length}개\n사진 파일을 별도로 포함한 ZIP으로 저장했습니다.`);
+  }else{
+    /* Fallback: create a self-contained JSON backup with data URLs. */
+    const data={...meta,photos:{}};
+    for(const p of photos){
+      data.photos[p.key]=await new Promise((res,rej)=>{
+        const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=()=>rej(fr.error);fr.readAsDataURL(p.blob);
+      });
+    }
+    v29Download(new Blob([JSON.stringify(data)],{type:"application/json"}),
+      `어린이음식도감_V29_백업_${new Date().toISOString().slice(0,10)}.json`);
+    alert(`백업 완료\n음식 ${foods.length}개 · 사진 ${photos.length}개`);
+  }
+}
+/* Minimal ZIP writer using STORE entries (no external library). */
+function v29CRC32(buf){
+  let table=v29CRC32.table;
+  if(!table){table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);table[n]=c>>>0}v29CRC32.table=table}
+  let c=0xffffffff;for(const b of buf)c=table[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0;
+}
+function v29U16(n){return new Uint8Array([n&255,(n>>>8)&255])}
+function v29U32(n){return new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255])}
+function v29Cat(parts){let total=parts.reduce((a,b)=>a+b.length,0),out=new Uint8Array(total),o=0;for(const p of parts){out.set(p,o);o+=p.length}return out}
+async function v29MakeZip(files){
+  const enc=new TextEncoder(), chunks=[], central=[];let offset=0;
+  for(const f of files){
+    const name=enc.encode(f.name), data=new Uint8Array(await f.blob.arrayBuffer()), crc=v29CRC32(data);
+    const local=v29Cat([new Uint8Array([80,75,3,4]),v29U16(20),v29U16(0),v29U16(0),v29U16(0),v29U16(0),v29U32(crc),v29U32(data.length),v29U32(data.length),v29U16(name.length),v29U16(0),name,data]);
+    chunks.push(local);
+    const cd=v29Cat([new Uint8Array([80,75,1,2]),v29U16(20),v29U16(20),v29U16(0),v29U16(0),v29U16(0),v29U16(0),v29U32(crc),v29U32(data.length),v29U32(data.length),v29U16(name.length),v29U16(0),v29U16(0),v29U16(0),v29U16(0),v29U32(0),v29U32(offset),name]);
+    central.push(cd);offset+=local.length;
+  }
+  const centralBlob=v29Cat(central), body=v29Cat(chunks);
+  const eocd=v29Cat([new Uint8Array([80,75,5,6]),v29U16(0),v29U16(0),v29U16(files.length),v29U16(files.length),v29U32(centralBlob.length),v29U32(body.length),v29U16(0)]);
+  return new Blob([body,centralBlob,eocd],{type:"application/zip"});
+}
+async function v29Restore(file){
+  /* Restore JSON fallback backups. ZIP restore is implemented separately below. */
+  const txt=await file.text(), p=JSON.parse(txt);
+  if(p.app!=="어린이 음식도감" || !p.foods) throw new Error("올바른 V29 백업이 아닙니다.");
+  v29WriteFoods(p.foods);
+  if(p.categories) localStorage.setItem(V29.CAT_KEY,p.categories);
+  let count=0;
+  for(const [key,dataUrl] of Object.entries(p.photos||{})){
+    const blob=await (await fetch(dataUrl)).blob(); await v29PutPhoto(key,blob); count++;
+  }
+  alert(`복원 완료\n음식 ${p.foods.length}개 · 사진 ${count}개`);
+  location.reload();
+}
+async function v29RestoreZip(file){
+  /* Parse STORE-only ZIP generated by v29MakeZip. */
+  const b=new Uint8Array(await file.arrayBuffer()), dv=new DataView(b.buffer);
+  const files={};
+  for(let i=0;i<b.length-4;i++){
+    if(dv.getUint32(i,true)===0x04034b50){
+      const nameLen=dv.getUint16(i+26,true), extraLen=dv.getUint16(i+28,true);
+      const size=dv.getUint32(i+18,true), name=new TextDecoder().decode(b.slice(i+30,i+30+nameLen));
+      const start=i+30+nameLen+extraLen;
+      files[name]=b.slice(start,start+size);
+      i=start+size-1;
+    }
+  }
+  if(!files["manifest.json"]) throw new Error("V29 백업 ZIP의 manifest.json을 찾지 못했습니다.");
+  const p=JSON.parse(new TextDecoder().decode(files["manifest.json"]));
+  if(p.app!=="어린이 음식도감" || !p.foods) throw new Error("올바른 음식도감 백업 ZIP이 아닙니다.");
+  v29WriteFoods(p.foods);
+  if(p.categories) localStorage.setItem(V29.CAT_KEY,p.categories);
+  let count=0;
+  for(const [key,info] of Object.entries(p.photoMap||{})){
+    const bytes=files[info.name]; if(!bytes) continue;
+    await v29PutPhoto(key,new Blob([bytes],{type:info.type||"image/jpeg"}));count++;
+  }
+  alert(`복원 완료\n음식 ${p.foods.length}개 · 사진 ${count}개`);
+  location.reload();
+}
+function v29PickRestore(){
+  const i=document.createElement("input");i.type="file";i.accept=".zip,.json,application/zip,application/json";
+  i.onchange=async()=>{try{const f=i.files?.[0];if(!f)return;if(f.name.toLowerCase().endsWith(".zip"))await v29RestoreZip(f);else await v29Restore(f)}catch(e){alert("복원 실패: "+(e.message||e))}};
+  i.click();
+}
+async function v29Status(){
+  const p=await v29Persist(), e=await v29Estimate(), photos=await v29AllPhotos(), foods=v29ReadFoods();
+  const el=document.getElementById("v29Status");
+  if(el)el.innerHTML=`<b>현재 저장상태</b><br>음식 ${foods.length}개 · 사진 ${photos.length}개<br>저장공간 ${e.usage?Math.round(e.usage/1024/1024):0}MB / ${e.quota?Math.round(e.quota/1024/1024):0}MB<br>보존모드: ${p.persisted?"사용 중":"요청됨/미확인"}`;
+}
+function v29UI(){
+  if(document.getElementById("v29Panel"))return;
+  const box=document.createElement("section");box.id="v29Panel";box.style.cssText="margin:16px 0;padding:14px;border:1px solid #ddd;border-radius:14px;background:#fff";
+  box.innerHTML=`<h3 style="margin:0 0 8px">🔐 V29 데이터 안전관리</h3>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button type="button" onclick="v29Backup()">💾 전체 백업</button>
+    <button type="button" onclick="v29PickRestore()">📥 백업 복원</button>
+    <button type="button" onclick="v29Status()">📊 저장상태 확인</button>
+  </div>
+  <div id="v29Status" style="margin-top:10px;font-size:13px"></div>
+  <p style="font-size:12px;color:#666;margin-bottom:0">중요: Safari와 홈 화면 앱은 저장공간이 분리될 수 있습니다. V29는 <b>현재 실행 중인 홈 화면 앱의 저장공간</b>을 기준으로 저장·백업합니다.</p>`;
+  const parent=document.querySelector("#parentMode,#parent-mode,.parent-mode")||document.body;
+  parent.prepend(box);
+}
+window.addEventListener("load",async()=>{
+  await v29Persist().catch(()=>{});
+  setTimeout(v29UI,500);
+});
+window.v29Backup=v29Backup;window.v29PickRestore=v29PickRestore;window.v29Status=v29Status;
+})();
+</script>
+
 </body>
 </html>
