@@ -1454,44 +1454,21 @@ async function v30Backup(){
  }catch(e){console.error(e);alert("전체 백업에 실패했습니다.\n"+(e.message||e))}
 }
 async function v30PutPhoto(id,dataUrl){
- if(!dataUrl||!String(dataUrl).startsWith("data:"))return false;
- // The current app DB/store is the first choice.
- const dbNames=["kids_food_photos_v25","KidsFoodPhotos"];
- const storeNames=["photos","PHOTO_STORE"];
- for(const dbName of dbNames){
-  let db;try{db=await v30OpenDB(dbName)}catch(_){continue}
-  for(const storeName of storeNames){
-   if(!db.objectStoreNames.contains(storeName))continue;
-   try{
-    const blob=await (await fetch(dataUrl)).blob();
-    await new Promise((resolve,reject)=>{
-     const tx=db.transaction(storeName,"readwrite"),store=tx.objectStore(storeName);
-     try{
-      if(store.keyPath){
-       const kp=typeof store.keyPath==='string'?store.keyPath:null;
-       const value=kp?{[kp]:id,blob}:blob;
-       store.put(value);
-      }else store.put(blob,id);
-     }catch(e){reject(e);return}
-     tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error("사진 저장 실패"));
-    });
-    db.close();return true;
-   }catch(_){ }
+  if(!dataUrl || !String(dataUrl).startsWith("data:")) return false;
+  try{
+    // V25-V29 already use this exact IndexedDB schema. Reuse it so upgrades
+    // and restores write to the same photo store instead of guessing a schema.
+    if(typeof v25PutPhoto === "function"){
+      await v25PutPhoto(String(id),dataUrl);
+      return true;
+    }
+    return false;
+  }catch(e){
+    console.warn("V30 photo write failed",e);
+    return false;
   }
-  try{db.close()}catch(_){ }
- }
- // If the known V25 DB does not exist yet, create it with the stable schema.
- try{
-  const db=await new Promise((resolve,reject)=>{
-   const r=indexedDB.open("kids_food_photos_v25",1);
-   r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("photos"))r.result.createObjectStore("photos")};
-   r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)
-  });
-  const blob=await (await fetch(dataUrl)).blob();
-  await new Promise((resolve,reject)=>{const tx=db.transaction("photos","readwrite");tx.objectStore("photos").put(blob,String(id));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
-  db.close();return true;
- }catch(e){console.warn("V30 photo write",e);return false}
 }
+
 async function v30Restore(file){
  if(!file)return;
  try{
@@ -1504,9 +1481,9 @@ async function v30Restore(file){
   }
   const photoCount=Object.keys(photoMap).length;
   if(!confirm(`V30 백업을 복원할까요?\n음식 ${p.foods.length}개 · 사진 ${photoCount}개\n\n기존 음식과 사진은 가능한 한 보존합니다.`))return;
-  if(!Array.isArray(window.data))throw new Error("음식 데이터 저장소를 찾을 수 없습니다.");
+  if(typeof data === "undefined" || !Array.isArray(data))throw new Error("음식 데이터 저장소를 찾을 수 없습니다.");
 
-  const old=window.data.slice();
+  const old=data.slice();
   const oldById=new Map(old.map(f=>[String(f.id),f]));
   const oldByName=new Map(old.map(f=>[String(f.name||"").trim(),f]));
   const next=p.foods.map(src=>{
@@ -1518,7 +1495,7 @@ async function v30Restore(file){
    }
    return f;
   });
-  window.data.splice(0,window.data.length,...next);
+  data.splice(0,data.length,...next);
   if(typeof v25SaveCategories==='function'&&Array.isArray(p.categories))v25SaveCategories(p.categories);
   if(typeof v28Save==='function')v28Save();else if(typeof v251SafeSave==='function')v251SafeSave();else if(typeof save==='function')save();
 
