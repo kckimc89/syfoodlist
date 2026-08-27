@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V25</title>
+<title>어린이 음식도감 V27</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -532,6 +532,7 @@ function editFood(id){
  const f=data.find(x=>x.id===id);if(!f)return;
  openModal(`<h2>✏️ 부모님 설명 보완</h2>
  <div class="infoBox">👧 아이가 기록한 내용<br>장소: ${esc(f.place||"기록 없음")}<br>느낌: ${esc(f.feel||"기록 없음")}<br>다시 먹기: ${esc(f.again||"기록 없음")}<br>한마디: ${esc(f.memo||"기록 없음")}</div>
+ <div class="field"><label>🍴 음식 이름</label><input id="e_name" value="${esc(f.name||"")}" placeholder="음식 이름을 입력하세요"><div class="small">음식 이름만 바꾸며 사진·즐겨찾기·설명·카테고리는 그대로 유지됩니다.</div></div>
  ${editField("e_desc","음식 설명",f.desc)}${editField("e_ing","주재료",f.ing)}${editField("e_how","어떻게 만들까요?",f.how)}${editField("e_health","건강하게 먹는 법",f.health)}${editField("e_tip","알아두면 좋은 점",f.tip)}
  <div class="field">
 <label>📂 카테고리</label>
@@ -650,13 +651,18 @@ async function takePhoto(id){
 }
 async function saveEdit(id){
   const f=data.find(x=>x.id===id);if(!f)return;
+  const newName=$("e_name").value.trim();
+  if(!newName){alert("음식 이름을 입력해 주세요.");return}
+  const duplicate=data.some(x=>x.id!==id && String(x.name||"").trim()===newName);
+  if(duplicate){alert("같은 이름의 음식이 이미 있습니다. 다른 이름을 입력해 주세요.");return}
+  f.name=newName;
   f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"미분류";
   const file=$("e_photo")?.files?.[0];
   try{
     if(file) await v251StorePhoto(id,await v251CompressImage(file,900,180000));
-    else v251SafeSave();
+    else if(!v251SafeSave()) throw new Error("음식 정보 저장 실패");
     render();await detail(id);
-  }catch(e){console.error(e);alert("저장 중 문제가 발생했습니다. 사진은 자동 압축되어 별도 저장됩니다. 다시 시도해 주세요.")}
+  }catch(e){console.error(e);alert("저장 중 문제가 발생했습니다. 음식 이름과 설명은 다시 시도해 주세요. 사진은 자동 압축되어 별도 저장됩니다.")}
 }
 async function saveAdd(){
   const name=$("a_name").value.trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
@@ -755,6 +761,155 @@ async function initV25(){
   await render();
 }
 /* ===== END V25.1 PATCH ===== */
+</script>
+
+<!-- V27_BACKUP_START -->
+<script>
+/* V27: whole-dictionary backup/restore.
+   Keeps the existing V26 food/localStorage and IndexedDB photo stores. */
+const V27_BACKUP_VERSION="1";
+const V27_BACKUP_MARKER="V27_BACKUP_START";
+
+function v27FindPhotoDB(){
+  return window.FOOD_PHOTO_DB || window.PHOTO_DB || "KidsFoodPhotos";
+}
+function v27FindPhotoStore(){
+  return window.FOOD_PHOTO_STORE || window.PHOTO_STORE || "photos";
+}
+function v27OpenPhotoDB(){
+  return new Promise((resolve,reject)=>{
+    if(!indexedDB){reject(new Error("이 브라우저는 IndexedDB를 지원하지 않습니다."));return}
+    const req=indexedDB.open(v27FindPhotoDB());
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("사진 저장소를 열 수 없습니다."));
+  });
+}
+function v27BlobToDataURL(blob){
+  return new Promise((resolve,reject)=>{
+    if(typeof blob==="string"){resolve(blob);return}
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=()=>reject(r.error||new Error("사진 변환 실패"));
+    r.readAsDataURL(blob);
+  });
+}
+async function v27ReadAllPhotos(){
+  const db=await v27OpenPhotoDB();
+  const storeName=v27FindPhotoStore();
+  if(!db.objectStoreNames.contains(storeName)){db.close();return {}}
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(storeName,"readonly");
+    const store=tx.objectStore(storeName);
+    const out={};
+    const req=store.openCursor();
+    req.onsuccess=async e=>{
+      const c=e.target.result;
+      if(!c){db.close();resolve(out);return}
+      try{out[String(c.key)]=await v27BlobToDataURL(c.value?.blob??c.value)}catch(_){}
+      c.continue();
+    };
+    req.onerror=()=>{db.close();reject(req.error)};
+  });
+}
+async function v27WritePhoto(id,dataUrl){
+  const db=await v27OpenPhotoDB();
+  const storeName=v27FindPhotoStore();
+  if(!db.objectStoreNames.contains(storeName)){db.close();return false}
+  const blob=await (await fetch(dataUrl)).blob();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(storeName,"readwrite");
+    const store=tx.objectStore(storeName);
+    // Preserve common V26 shapes; otherwise store the Blob directly.
+    let value=blob;
+    if(store.keyPath){ value={id:id,blob:blob}; }
+    try{
+      if(store.keyPath) store.put(value);
+      else store.put(blob,id);
+    }catch(e){db.close();reject(e);return}
+    tx.oncomplete=()=>{db.close();resolve(true)};
+    tx.onerror=()=>{db.close();reject(tx.error||new Error("사진 저장 실패"))};
+  });
+}
+async function v27Backup(){
+  try{
+    const photos=await v27ReadAllPhotos();
+    const payload={
+      app:"어린이 음식도감",
+      version:"V27",
+      createdAt:new Date().toISOString(),
+      origin:location.origin,
+      foods:(typeof data!=="undefined"?data:[]),
+      categories:(typeof getCategories==="function"?getCategories():[]),
+      photos
+    };
+    const blob=new Blob([JSON.stringify(payload)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`어린이음식도감_백업_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    alert(`백업 파일을 만들었습니다.\n음식 ${payload.foods.length}개 · 사진 ${Object.keys(photos).length}개`);
+  }catch(e){
+    alert("백업 중 문제가 발생했습니다.\n"+(e.message||e));
+  }
+}
+async function v27RestoreFile(file){
+  const text=await file.text();
+  const p=JSON.parse(text);
+  if(!p || p.app!=="어린이 음식도감" || !Array.isArray(p.foods)){
+    throw new Error("올바른 어린이 음식도감 백업 파일이 아닙니다.");
+  }
+  if(!confirm(`백업을 복원할까요?\n음식 ${p.foods.length}개 · 사진 ${Object.keys(p.photos||{}).length}개\n현재 데이터에 백업 데이터를 합칩니다.`))return;
+  if(typeof data==="undefined")throw new Error("음식 데이터 저장소를 찾을 수 없습니다.");
+
+  const byId=new Map(data.map(x=>[String(x.id),x]));
+  p.foods.forEach(f=>byId.set(String(f.id),f));
+  data.splice(0,data.length,...byId.values());
+  if(typeof save==="function")save();
+
+  if(Array.isArray(p.categories) && typeof saveCategories==="function")saveCategories(p.categories);
+  let restored=0, failed=0;
+  for(const [id,src] of Object.entries(p.photos||{})){
+    try{if(await v27WritePhoto(id,src))restored++;else failed++}catch(_){failed++}
+  }
+  if(typeof render==="function")render();
+  alert(`복원이 완료되었습니다.\n음식 ${p.foods.length}개 · 사진 ${restored}개`+(failed?`\n사진 ${failed}개는 복원하지 못했습니다.`:""));
+}
+function v27PickRestore(){
+  const i=document.createElement("input");
+  i.type="file"; i.accept=".json,application/json";
+  i.onchange=async()=>{if(!i.files?.[0])return;try{await v27RestoreFile(i.files[0])}catch(e){alert("복원 실패: "+(e.message||e))}};
+  i.click();
+}
+function v27AddBackupUI(){
+  const host=document.querySelector("#parentMode")||document.querySelector("#parent-mode")||document.body;
+  if(document.getElementById("v27BackupBox"))return;
+  const box=document.createElement("div");
+  box.id="v27BackupBox";
+  box.className="infoBox";
+  box.innerHTML=`<b>💾 음식도감 안전관리</b>
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+    <button type="button" onclick="v27Backup()">💾 전체 백업</button>
+    <button type="button" class="alt" onclick="v27PickRestore()">📥 백업 복원</button>
+  </div>
+  <div style="margin-top:7px;font-size:13px;color:#666">음식·카테고리·즐겨찾기·사진을 한 파일로 보관할 수 있습니다.</div>`;
+  host.prepend(box);
+}
+window.addEventListener("load",()=>setTimeout(v27AddBackupUI,300));
+</script>
+<!-- V27_BACKUP_END -->
+
+<div id="v27StorageStatus" style="position:fixed;right:10px;bottom:8px;font-size:11px;color:#777;background:#fff;padding:4px 7px;border-radius:8px;opacity:.8"></div>
+
+<script>
+function v27StorageStatus(){
+  const n=(typeof data!=="undefined" && Array.isArray(data))?data.length:0;
+  const fav=(typeof data!=="undefined" && Array.isArray(data))?data.filter(x=>x.favorite).length:0;
+  const el=document.getElementById("v27StorageStatus");
+  if(el)el.textContent=`음식 ${n}개 · ⭐ 즐겨찾기 ${fav}개`;
+}
+window.addEventListener("load",()=>setTimeout(v27StorageStatus,500));
 </script>
 </body>
 </html>
