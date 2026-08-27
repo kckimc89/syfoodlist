@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V27</title>
+<title>어린이 음식도감 V28</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -911,5 +911,172 @@ function v27StorageStatus(){
 }
 window.addEventListener("load",()=>setTimeout(v27StorageStatus,500));
 </script>
+
+<script>
+/* ===== V28 DATA-PRESERVATION LAYER =====
+   Do not change the existing V25 IndexedDB database name. This is deliberate:
+   existing V25/V26/V27 photos remain in the same database on the same origin.
+*/
+const V28_SHADOW_KEY="kids_food_v28_shadow";
+const V28_VERSION="V28";
+
+function v28CloneFoods(){
+  return JSON.parse(JSON.stringify(Array.isArray(data)?data:[]));
+}
+function v28WriteShadow(){
+  try{
+    const slim=v28CloneFoods().map(f=>{const x={...f};
+      // Never put a data URL into the shadow copy; photos live in IndexedDB.
+      if(x.photo && String(x.photo).startsWith("data:")) x.photo="idb:"+x.id;
+      return x;
+    });
+    localStorage.setItem(V28_SHADOW_KEY,JSON.stringify(slim));
+    return true;
+  }catch(e){console.warn("V28 shadow save failed",e);return false}
+}
+function v28ReadShadow(){
+  try{const x=JSON.parse(localStorage.getItem(V28_SHADOW_KEY)||"[]");return Array.isArray(x)?x:[]}catch(e){return []}
+}
+async function v28RecoverIfPrimaryEmpty(){
+  if(Array.isArray(data)&&data.length) return false;
+  const shadow=v28ReadShadow();
+  if(!shadow.length)return false;
+  data=shadow;
+  if(typeof v251SafeSave==="function")v251SafeSave(); else localStorage.setItem(KEY,JSON.stringify(data));
+  return true;
+}
+async function v28MigrateAllInlinePhotos(){
+  let changed=false, migrated=0;
+  for(const f of data){
+    if(f.photo && String(f.photo).startsWith("data:")){
+      try{
+        await v25PutPhoto(f.id,f.photo);
+        f.photo="idb:"+f.id;
+        changed=true; migrated++;
+      }catch(e){console.warn("V28 photo migration failed",f.id,e)}
+    }
+  }
+  if(changed && typeof v251SafeSave==="function")v251SafeSave();
+  return migrated;
+}
+async function v28Init(){
+  await v28RecoverIfPrimaryEmpty();
+  // Recover old inline photos before writing any new slim copy.
+  try{await v28MigrateAllInlinePhotos()}catch(e){console.warn(e)}
+  // Fill educational information without overwriting parent-entered text.
+  try{if(typeof v251FillKnowledge==="function")v251FillKnowledge()}catch(e){console.warn(e)}
+  data=data.map(f=>({...f,favorite:!!(f.favorite||f.fav)}));
+  if(typeof v251SafeSave==="function")v251SafeSave();
+  v28WriteShadow();
+  await render();
+  v28StorageStatus();
+}
+
+/* Replace the main save path with a photo-free LocalStorage snapshot plus a shadow copy. */
+function v28Save(){
+  try{
+    const slim=data.map(f=>{const x={...f};if(String(x.photo||"").startsWith("data:"))x.photo="idb:"+x.id;return x});
+    localStorage.setItem(KEY,JSON.stringify(slim));
+    localStorage.setItem(V28_SHADOW_KEY,JSON.stringify(slim));
+    return true;
+  }catch(e){alert("음식 정보 저장에 실패했습니다. 사진은 별도 저장소에 보관됩니다.\n저장공간을 확인해 주세요.");return false}
+}
+
+async function v28SaveEdit(id){
+  const f=data.find(x=>x.id===id);if(!f)return;
+  const name=(document.getElementById("e_name")?.value||"").trim();
+  if(!name){alert("음식 이름을 입력해 주세요.");return}
+  if(data.some(x=>x.id!==id && String(x.name||"").trim()===name)){alert("같은 이름의 음식이 이미 있습니다.");return}
+  f.name=name;
+  f.desc=document.getElementById("e_desc")?.value.trim()||"";
+  f.ing=document.getElementById("e_ing")?.value.trim()||"";
+  f.how=document.getElementById("e_how")?.value.trim()||"";
+  f.health=document.getElementById("e_health")?.value.trim()||"";
+  f.tip=document.getElementById("e_tip")?.value.trim()||"";
+  f.cat=document.getElementById("e_cat")?.value||"미분류";
+  try{
+    const file=document.getElementById("e_photo")?.files?.[0];
+    if(file){const d=await v251CompressImage(file,900,180000);await v25PutPhoto(id,d);f.photo="idb:"+id}
+    if(!v28Save())throw new Error("음식 정보 저장 실패");
+    render();await detail(id);
+  }catch(e){console.error(e);alert("저장에 실패했습니다. 기존 정보는 유지됩니다.\n"+(e.message||e))}
+}
+
+async function v28SaveAdd(){
+  const name=(document.getElementById("a_name")?.value||"").trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
+  if(data.some(x=>String(x.name||"").trim()===name)){alert("같은 이름의 음식이 이미 있습니다.");return}
+  const f={id:"u"+Date.now()+""+Math.random().toString(36).slice(2,6),name,cat:"미분류",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,favorite:false,place:document.getElementById("a_place")?.value||"",feel:document.getElementById("a_feel")?.value||"",again:document.getElementById("a_again")?.value||"",memo:document.getElementById("a_memo")?.value.trim()||""};
+  const file=document.getElementById("a_photo")?.files?.[0];
+  try{
+    data.unshift(f);
+    if(file){const d=await v251CompressImage(file,900,180000);await v25PutPhoto(f.id,d);f.photo="idb:"+f.id}
+    if(!v28Save()){throw new Error("저장공간 부족")}
+    closeModal();render();
+  }catch(e){data=data.filter(x=>x.id!==f.id);v28Save();alert("음식 등록에 실패했습니다. 기존 도감은 유지됩니다.\n"+(e.message||e))}
+}
+
+async function v28ToggleFavorite(id){
+  const f=data.find(x=>x.id===id);if(!f)return;f.favorite=!f.favorite;v28Save();render();
+}
+
+async function v28DeleteFood(id){
+  if(!confirm("이 음식을 도감에서 삭제할까요?"))return;
+  data=data.filter(x=>x.id!==id);v28Save();
+  try{await v25DeletePhoto(id)}catch(e){}
+  closeModal();render();
+}
+
+async function v28Backup(){
+  try{
+    const foods=[];
+    for(const f of data){
+      let photo="";try{photo=await v25GetPhoto(f)}catch(e){}
+      foods.push({...f,photo});
+    }
+    const payload={app:"어린이 음식도감",version:V28_VERSION,createdAt:new Date().toISOString(),origin:location.origin,foods,categories:v25GetCategories()};
+    const blob=new Blob([JSON.stringify(payload)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`어린이음식도감_V28_백업_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    alert(`백업 완료\n음식 ${foods.length}개 · 사진 ${foods.filter(f=>f.photo).length}개`);
+  }catch(e){alert("백업에 실패했습니다.\n"+(e.message||e))}
+}
+async function v28Restore(file){
+  if(!file)return;
+  try{
+    const p=JSON.parse(await file.text());
+    if(!p || p.app!=="어린이 음식도감" || !Array.isArray(p.foods))throw new Error("올바른 음식도감 백업 파일이 아닙니다.");
+    if(!confirm(`백업을 복원할까요?\n음식 ${p.foods.length}개 · 사진 ${p.foods.filter(f=>f.photo).length}개\n현재 데이터를 백업 데이터로 교체합니다.`))return;
+    const old=data;
+    const next=p.foods.map(f=>({...f,favorite:!!(f.favorite||f.fav)}));
+    data=next;
+    // Write photos first. If a photo fails, keep its food but report the count.
+    let ok=0,fail=0;
+    for(const f of data){if(f.photo&&String(f.photo).startsWith("data:")){try{await v25PutPhoto(f.id,f.photo);f.photo="idb:"+f.id;ok++}catch(e){fail++}}}
+    if(typeof v25SaveCategories==="function"&&Array.isArray(p.categories))v25SaveCategories(p.categories);
+    if(!v28Save()){data=old;throw new Error("복원 후 음식 정보 저장에 실패했습니다.")}
+    await render();
+    alert(`복원 완료\n음식 ${data.length}개 · 사진 ${ok}개`+(fail?`\n사진 ${fail}개는 다시 등록해 주세요.`:""));
+  }catch(e){alert("복원에 실패했습니다.\n"+(e.message||e))}
+}
+function v28PickRestore(){const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.onchange=()=>v28Restore(i.files?.[0]);i.click()}
+function v28StorageStatus(){
+  const el=document.getElementById("v27StorageStatus");if(!el)return;
+  const fav=data.filter(f=>!!f.favorite).length;el.textContent=`V28 · 음식 ${data.length}개 · ⭐ ${fav}개`;
+}
+function v28AddSafetyUI(){
+  if(document.getElementById("v28SafetyBox"))return;
+  const host=document.querySelector(".wrap")||document.body;
+  const box=document.createElement("div");box.id="v28SafetyBox";box.className="infoBox";
+  box.innerHTML=`<b>🛡️ V28 데이터 안전관리</b><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" onclick="v28Backup()">💾 전체 백업</button><button type="button" class="alt" onclick="v28PickRestore()">📥 백업 복원</button></div><div style="margin-top:6px">프로그램을 업데이트해도 같은 홈페이지 주소를 사용하면 음식·사진 저장소를 그대로 사용합니다. 중요한 사진이 많다면 업데이트 전 전체 백업을 권장합니다.</div>`;
+  host.insertBefore(box,host.firstChild);
+}
+
+// Use the V28 handlers from now on.
+window.saveEdit=v28SaveEdit;window.saveAdd=v28SaveAdd;window.toggleFavorite=v28ToggleFavorite;window.deleteFood=v28DeleteFood;
+window.exportV25Backup=v28Backup;window.importV25Backup=v28Restore;
+window.addEventListener("load",()=>setTimeout(v28AddSafetyUI,500));
+// Re-run initialization after all V28 overrides are defined.
+window.addEventListener("load",()=>setTimeout(v28Init,650));
+</script>
+
 </body>
 </html>
