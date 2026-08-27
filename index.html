@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>어린이 음식도감 V29 최종 기준판</title>
+<title>어린이 음식도감 V30 최종 사진안전판</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
 header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
@@ -1345,6 +1345,217 @@ function install(){
 }
 window.v29SetChildName=editName;
 window.addEventListener("load",()=>setTimeout(install,400));
+})();
+</script>
+
+<script>
+/* ===== V30 PHOTO-SAFE BACKUP / RESTORE =====
+   Goals:
+   1) Keep V29 data/UI behavior.
+   2) Backup photos stored in IndexedDB AND legacy inline data URLs.
+   3) Restore old V29 JSON backups whose photos are stored in food.photo.
+   4) Never overwrite a good existing photo with an empty backup photo.
+   5) Use the same photo DB as V25-V29 so upgrades on the same GitHub Pages
+      origin keep existing photos.
+*/
+(function(){
+"use strict";
+const V30_VERSION="V30-PHOTO-SAFE-1";
+const PHOTO_DB_NAMES=["kids_food_photos_v25","KidsFoodPhotos","FOOD_PHOTO_DB"];
+const PHOTO_STORE_NAMES=["photos","PHOTO_STORE"];
+
+function v30OpenDB(name){
+ return new Promise((resolve,reject)=>{
+  try{
+   const r=indexedDB.open(name);
+   r.onsuccess=()=>resolve(r.result);
+   r.onerror=()=>reject(r.error||new Error("사진 저장소를 열 수 없습니다."));
+  }catch(e){reject(e)}
+ });
+}
+function v30BlobToData(v){
+ if(!v)return Promise.resolve("");
+ if(typeof v==="string")return Promise.resolve(v);
+ if(v instanceof Blob || v instanceof File){
+  return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result||"");r.onerror=()=>reject(r.error);r.readAsDataURL(v)})
+ }
+ if(v.blob)return v30BlobToData(v.blob);
+ if(v.dataUrl)return Promise.resolve(v.dataUrl);
+ return Promise.resolve("");
+}
+async function v30ReadDB(dbName,storeName){
+ let db;try{db=await v30OpenDB(dbName)}catch(e){return {}};
+ if(!db.objectStoreNames.contains(storeName)){db.close();return {}}
+ return new Promise((resolve,reject)=>{
+  const out={},tx=db.transaction(storeName,"readonly"),store=tx.objectStore(storeName);
+  const req=store.openCursor();
+  req.onsuccess=async ev=>{
+   const c=ev.target.result;
+   if(!c){db.close();resolve(out);return}
+   try{const d=await v30BlobToData(c.value);if(d)out[String(c.key)]=d}catch(_){ }
+   c.continue();
+  };
+  req.onerror=()=>{db.close();reject(req.error||new Error("사진 읽기 실패"))};
+ });
+}
+async function v30ReadAllPhotos(){
+ const out={};
+ // First prefer the database used by V25-V29.
+ for(const dbName of PHOTO_DB_NAMES){
+  for(const storeName of PHOTO_STORE_NAMES){
+   try{const got=await v30ReadDB(dbName,storeName);Object.assign(out,got)}catch(_){ }
+  }
+ }
+ // Then fill gaps from the application's food records.
+ if(Array.isArray(window.data)){
+  for(const f of window.data){
+   const id=String(f.id);
+   if(out[id])continue;
+   try{
+    const src=await (typeof v25GetPhoto==='function'?v25GetPhoto(f):Promise.resolve(String(f.photo||"")));
+    if(src&&String(src).startsWith("data:"))out[id]=src;
+   }catch(_){ }
+  }
+ }
+ return out;
+}
+function v30SlimFood(f){
+ const x={...f};
+ // Do not export the temporary IDB marker as if it were a portable photo.
+ if(x.photo&&String(x.photo).startsWith("idb:"))x.photo="";
+ return x;
+}
+async function v30Backup(){
+ try{
+  const foods=Array.isArray(window.data)?data.map(v30SlimFood):[];
+  const photos=await v30ReadAllPhotos();
+  // Put portable photo data into each food record as well as the top-level map.
+  // This keeps compatibility with earlier V28/V29 restore formats.
+  for(const f of foods){
+   const id=String(f.id||"");
+   if(photos[id])f.photo=photos[id];
+  }
+  const payload={
+   app:"어린이 음식도감",
+   version:V30_VERSION,
+   createdAt:new Date().toISOString(),
+   origin:location.origin,
+   foods,
+   categories:(typeof v25GetCategories==='function'?v25GetCategories():[]),
+   photos
+  };
+  const text=JSON.stringify(payload);
+  const blob=new Blob([text],{type:"application/json;charset=utf-8"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=`어린이음식도감_V30_전체백업_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  alert(`V30 전체 백업 완료\n음식 ${foods.length}개 · 사진 ${Object.keys(photos).length}개\n\n사진까지 백업 파일에 포함했습니다.`);
+ }catch(e){console.error(e);alert("전체 백업에 실패했습니다.\n"+(e.message||e))}
+}
+async function v30PutPhoto(id,dataUrl){
+ if(!dataUrl||!String(dataUrl).startsWith("data:"))return false;
+ // The current app DB/store is the first choice.
+ const dbNames=["kids_food_photos_v25","KidsFoodPhotos"];
+ const storeNames=["photos","PHOTO_STORE"];
+ for(const dbName of dbNames){
+  let db;try{db=await v30OpenDB(dbName)}catch(_){continue}
+  for(const storeName of storeNames){
+   if(!db.objectStoreNames.contains(storeName))continue;
+   try{
+    const blob=await (await fetch(dataUrl)).blob();
+    await new Promise((resolve,reject)=>{
+     const tx=db.transaction(storeName,"readwrite"),store=tx.objectStore(storeName);
+     try{
+      if(store.keyPath){
+       const kp=typeof store.keyPath==='string'?store.keyPath:null;
+       const value=kp?{[kp]:id,blob}:blob;
+       store.put(value);
+      }else store.put(blob,id);
+     }catch(e){reject(e);return}
+     tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error("사진 저장 실패"));
+    });
+    db.close();return true;
+   }catch(_){ }
+  }
+  try{db.close()}catch(_){ }
+ }
+ // If the known V25 DB does not exist yet, create it with the stable schema.
+ try{
+  const db=await new Promise((resolve,reject)=>{
+   const r=indexedDB.open("kids_food_photos_v25",1);
+   r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("photos"))r.result.createObjectStore("photos")};
+   r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)
+  });
+  const blob=await (await fetch(dataUrl)).blob();
+  await new Promise((resolve,reject)=>{const tx=db.transaction("photos","readwrite");tx.objectStore("photos").put(blob,String(id));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
+  db.close();return true;
+ }catch(e){console.warn("V30 photo write",e);return false}
+}
+async function v30Restore(file){
+ if(!file)return;
+ try{
+  const p=JSON.parse(await file.text());
+  if(!p||p.app!=="어린이 음식도감"||!Array.isArray(p.foods))throw new Error("올바른 어린이 음식도감 백업 파일이 아닙니다.");
+  const topPhotos=(p.photos&&typeof p.photos==='object')?p.photos:{};
+  const photoMap={...topPhotos};
+  for(const f of p.foods){
+   if(f.photo&&String(f.photo).startsWith("data:"))photoMap[String(f.id)]=f.photo;
+  }
+  const photoCount=Object.keys(photoMap).length;
+  if(!confirm(`V30 백업을 복원할까요?\n음식 ${p.foods.length}개 · 사진 ${photoCount}개\n\n기존 음식과 사진은 가능한 한 보존합니다.`))return;
+  if(!Array.isArray(window.data))throw new Error("음식 데이터 저장소를 찾을 수 없습니다.");
+
+  const old=window.data.slice();
+  const oldById=new Map(old.map(f=>[String(f.id),f]));
+  const oldByName=new Map(old.map(f=>[String(f.name||"").trim(),f]));
+  const next=p.foods.map(src=>{
+   const f={...src,favorite:!!(src.favorite||src.fav)};
+   const oldF=oldById.get(String(src.id))||oldByName.get(String(src.name||"").trim());
+   // Empty/marker backup photos never erase a working existing photo.
+   if(!f.photo || !String(f.photo).startsWith("data:")){
+    if(oldF?.photo)f.photo=oldF.photo;
+   }
+   return f;
+  });
+  window.data.splice(0,window.data.length,...next);
+  if(typeof v25SaveCategories==='function'&&Array.isArray(p.categories))v25SaveCategories(p.categories);
+  if(typeof v28Save==='function')v28Save();else if(typeof v251SafeSave==='function')v251SafeSave();else if(typeof save==='function')save();
+
+  let restored=0,failed=0,kept=0;
+  for(const f of next){
+   const id=String(f.id);
+   const src=photoMap[id];
+   if(src&&String(src).startsWith("data:")){
+    if(await v30PutPhoto(id,src)){f.photo="idb:"+id;restored++}else failed++;
+   }else if(f.photo&&String(f.photo).startsWith("idb:")){
+    try{const existing=await (typeof v25GetStoredPhoto==='function'?v25GetStoredPhoto(id):Promise.resolve(""));if(existing)kept++}catch(_){ }
+   }
+  }
+  if(typeof v28Save==='function')v28Save();else if(typeof v251SafeSave==='function')v251SafeSave();
+  if(typeof render==='function')await render();
+  alert(`V30 복원 완료\n음식 ${next.length}개\n사진 ${restored}개 복원 · 기존 사진 ${kept}개 유지${failed?` · 사진 ${failed}개 저장 실패`:""}`);
+ }catch(e){console.error(e);alert("백업 복원에 실패했습니다.\n"+(e.message||e))}
+}
+function v30PickRestore(){
+ const i=document.createElement("input");i.type="file";i.accept=".json,application/json";
+ i.onchange=()=>{if(i.files?.[0])v30Restore(i.files[0])};i.click();
+}
+function installV30Backup(){
+ // Existing V29 backup dropdown buttons are reused so the UI stays simple.
+ const b=document.getElementById("v29BackupDo"),r=document.getElementById("v29RestoreDo");
+ if(b)b.onclick=()=>{document.getElementById("v29BackupMenu")?.setAttribute("hidden","");v30Backup()};
+ if(r)r.onclick=()=>{document.getElementById("v29BackupMenu")?.setAttribute("hidden","");v30PickRestore()};
+ const top=document.getElementById("backupBtn");
+ if(top)top.setAttribute("data-version","V30");
+}
+window.v28Backup=v30Backup;
+window.v28Restore=v30Restore;
+window.v28PickRestore=v30PickRestore;
+window.v30Backup=v30Backup;
+window.v30Restore=v30Restore;
+window.v30PickRestore=v30PickRestore;
+window.addEventListener("load",()=>setTimeout(installV30Backup,1200));
 })();
 </script>
 </body>
