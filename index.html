@@ -1257,85 +1257,22 @@ window.addEventListener("load",()=>setTimeout(boot,300));
 })();
 </script>
 
+
+
+
 <script>
-/* V29 FINAL REPAIR: new-food draft helper must never block the original UI */
+/* V29: optional educational draft helper -- never intercepts the app UI */
 (function(){
-"use strict";
-
-function txt(el){
-  return String(el?.value ?? el?.textContent ?? "").trim();
-}
-function setv(el,v){
-  if(!el)return;
-  if("value" in el){
-    el.value=v;
-    el.dispatchEvent(new Event("input",{bubbles:true}));
-    el.dispatchEvent(new Event("change",{bubbles:true}));
-  }else{
-    el.textContent=v;
-    el.dispatchEvent(new Event("input",{bubbles:true}));
-  }
-}
-function findField(words){
-  const els=[...document.querySelectorAll("input,textarea,[contenteditable='true']")];
-  return els.find(el=>{
-    const s=((el.id||"")+" "+(el.name||"")+" "+(el.placeholder||"")+" "+
-      (el.getAttribute("aria-label")||"")+" "+(el.previousElementSibling?.textContent||"")).toLowerCase();
-    return words.some(w=>s.includes(w));
-  });
-}
-function makeDraft(name,ingredients){
-  const n=name||"이 음식";
-  const ing=ingredients||"여러 가지 재료";
-  return {
-    desc:`${n}은(는) ${ing} 등을 재료로 만들어 먹는 음식이에요. 재료와 조리 방법에 따라 맛과 영양이 달라질 수 있어요.`,
-    healthy:`${n}은(는) 한 가지 음식만 많이 먹기보다 여러 가지 음식을 골고루 먹는 것이 좋아요. 짜거나 달게 만든 음식은 적당히 먹어요.`,
-    know:`${n}에는 여러 가지 재료가 들어갈 수 있어요. 같은 음식도 재료와 조리 방법에 따라 영양 성분이 달라질 수 있으니 재료를 살펴보면 좋아요.`
+  window.makeFoodEducationDraft=function(name,ingredients){
+    name=String(name||"").trim();
+    ingredients=String(ingredients||"").trim() || "여러 가지 재료";
+    if(!name) return null;
+    return {
+      description:`${name}은(는) ${ingredients} 등을 재료로 만들어 먹는 음식이에요. 재료와 조리 방법에 따라 맛과 영양이 달라질 수 있어요.`,
+      healthy:`${name}은(는) 한 가지 음식만 많이 먹기보다 여러 가지 음식을 골고루 먹는 것이 좋아요. 짜거나 달게 만든 음식은 적당히 먹어요.`,
+      know:`${name}에는 여러 가지 재료가 들어갈 수 있어요. 같은 음식도 재료와 조리 방법에 따라 영양 성분이 달라질 수 있으니 재료를 살펴보면 좋아요.`
+    };
   };
-}
-function draftOnly(){
-  try{
-    const nameEl=findField(["음식이름","음식 이름","food name"]);
-    const ingEl=findField(["주재료","주 재료","ingredients","ingredient"]);
-    const name=txt(nameEl);
-    if(!name)return;
-    const d=makeDraft(name,txt(ingEl));
-    const desc=findField(["음식설명","음식 설명","description"]);
-    const healthy=findField(["건강하게먹는법","건강하게 먹는 법","healthy"]);
-    const know=findField(["알아두면좋은점","알아두면 좋은 점","know"]);
-    if(desc&&!txt(desc))setv(desc,d.desc);
-    if(healthy&&!txt(healthy))setv(healthy,d.healthy);
-    if(know&&!txt(know))setv(know,d.know);
-  }catch(_){
-    // Never interfere with the original application.
-  }
-}
-function isNewFoodContext(){
-  const body=(document.body?.innerText||"").slice(0,12000);
-  return /새로운 음식 발견|새 음식 발견|음식 추가/.test(body);
-}
-function install(){
-  // IMPORTANT: do not intercept buttons and do not run on click.
-  // Only observe input changes while the new-food screen is visibly active.
-  document.addEventListener("input",function(){
-    if(!isNewFoodContext())return;
-    clearTimeout(window.__v29DraftTimer);
-    window.__v29DraftTimer=setTimeout(draftOnly,250);
-  },true);
-
-  const note=document.createElement("div");
-  note.id="v29AutoDraftNote";
-  note.style.cssText="display:none;margin:8px 0;padding:10px 12px;border-radius:12px;background:#f6f7f8;font-size:13px;line-height:1.5";
-  note.textContent="💡 음식 이름과 주재료를 입력하면 부모님 설명보완에 기본 설명 초안이 자동으로 준비됩니다. 저장을 막거나 대신 처리하지 않습니다.";
-  document.body.appendChild(note);
-
-  setInterval(()=>{
-    const active=isNewFoodContext();
-    note.style.display=active?"block":"none";
-  },700);
-}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",install);
-else setTimeout(install,300);
 })();
 </script>
 
