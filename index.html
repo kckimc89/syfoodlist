@@ -100,18 +100,126 @@ function closeModal(){stopCamera();$("modal").classList.remove("show")}
 $("modal").addEventListener("click",e=>{if(e.target===$("modal"))closeModal()})
 
 function renderFilters(){
- const cats=["전체",...new Set(data.map(x=>x.cat||"새로 발견한 음식"))];
- $("filters").innerHTML=cats.map(c=>`<button class="chip ${c===category?"on":""}" onclick="setCat('${esc(c)}')">${esc(c)}</button>`).join("");
+ const cats=["전체","__FAVORITES__",...v25GetCategories()];
+ $(
+"filters").innerHTML=cats.map(c=>`<button class="chip ${c===category?"on":""}" onclick="setCat(${JSON.stringify(c)})">${c==="__FAVORITES__"?"⭐ 즐겨찾기":esc(c)}</button>`).join("");
 }
 function setCat(c){category=c;render()}
 function render(){
  renderFilters();
- const list=category==="전체"?data:data.filter(x=>(x.cat||"새로 발견한 음식")===category);
- $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')"><button type="button" class="favStar" onclick="event.stopPropagation();toggleFavorite('${f.id}')">${f.favorite?"⭐":"☆"}</button>
- <div class="pic">${f.photo?`<img src="${f.photo}" alt="">`:`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div>
- <div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"새로 발견한 음식")}</div></div>
- </div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
+ let list=category==="전체"?data:category==="__FAVORITES__"?data.filter(f=>!!f.favorite):data.filter(f=>(f.cat||"미분류")===category);
+ const q=(document.getElementById("v25SearchInput")?.value||"").trim().toLowerCase();
+ if(q)list=list.filter(f=>[f.name,f.ing,f.desc,f.tip,f.health,f.how].some(v=>String(v||"").toLowerCase().includes(q)));
+ $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')"><button type="button" class="favStar" onclick="event.stopPropagation();toggleFavorite('${f.id}')">${f.favorite?"⭐":"☆"}</button><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
+ loadAllPhotoCards(list);
 }
+async function loadAllPhotoCards(list){
+ for(const f of list){
+  if(!f.photo)continue;
+  const src=await v25GetPhoto(f);
+  const el=document.getElementById("pic-"+f.id);
+  if(el&&src)el.innerHTML=`<img src="${src}" alt="${esc(f.name)}" loading="lazy">`;
+ }
+}
+async function detail(id){
+ const f=data.find(x=>x.id===id);if(!f)return;
+ const src=await v25GetPhoto(f);
+ openModal(`<div>${src?`<img class="detailPhoto" src="${src}" alt="${esc(f.name)}">`:`<div class="pic" style="height:220px;border-radius:18px">🍴</div>`}</div><div class="learn"><h3>${esc(f.name)}</h3>${f.place||f.feel||f.again||f.memo?`<div class="learnbox"><b>👧 내가 기록한 이야기</b><br>📍 ${esc(f.place||"기록 없음")}<br>😋 ${esc(f.feel||"기록 없음")}<br>❤️ 다시 먹기: ${esc(f.again||"기록 없음")}<br>✏️ ${esc(f.memo||"기록 없음")}</div>`:""}${section("음식 설명",f.desc||"아직 부모님 설명이 없어요.")}${section("주재료",f.ing||"아직 알려주지 않았어요.")}${section("어떻게 만들까요?",f.how||"아직 알려주지 않았어요.")}${section("건강하게 먹는 법",f.health||"아직 알려주지 않았어요.")}${section("💡 알아두면 좋은 점",f.tip||"아직 알려주지 않았어요.")}</div><div class="actions"><button onclick="photoForFood('${f.id}')">📷 ${f.photo?"사진 바꾸기":"사진 등록"}</button>${parentMode?`<button onclick="editFood('${f.id}')">✏️ 부모님 설명 수정</button><button class="danger" onclick="deleteFood('${f.id}')">🗑️ 삭제</button>`:""}<button class="alt" onclick="closeModal()">닫기</button></div>`);
+}
+function section(t,v){return `<div class="section"><h4>${t}</h4><div>${esc(v)}</div></div>`}
+
+// IndexedDB keeps photos outside LocalStorage. Metadata stays tiny, preventing quota failures.
+const V25_PHOTO_DB="kids_food_photos_v25";
+let v25PhotoDBPromise=null;
+function v25OpenPhotoDB(){
+ if(!window.indexedDB)return Promise.reject(new Error("IndexedDB 미지원"));
+ if(v25PhotoDBPromise)return v25PhotoDBPromise;
+ v25PhotoDBPromise=new Promise((resolve,reject)=>{const r=indexedDB.open(V25_PHOTO_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("photos"))r.result.createObjectStore("photos")};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error("사진 저장소를 열 수 없습니다."))});
+ return v25PhotoDBPromise;
+}
+function v25PutPhoto(id,dataUrl){return v25OpenPhotoDB().then(db=>new Promise((resolve,reject)=>{const tx=db.transaction("photos","readwrite");tx.objectStore("photos").put(dataUrl,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("사진 저장 실패"))}))}
+function v25GetStoredPhoto(id){return v25OpenPhotoDB().then(db=>new Promise((resolve,reject)=>{const tx=db.transaction("photos","readonly"),r=tx.objectStore("photos").get(id);r.onsuccess=()=>resolve(r.result||"");r.onerror=()=>reject(r.error)}))}
+function v25DeletePhoto(id){return v25OpenPhotoDB().then(db=>new Promise((resolve,reject)=>{const tx=db.transaction("photos","readwrite");tx.objectStore("photos").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)}))}
+async function v25GetPhoto(f){
+ if(!f||!f.photo)return "";
+ if(String(f.photo).startsWith("idb:"))return await v25GetStoredPhoto(f.id);
+ return f.photo;
+}
+async function v25MigratePhotos(){
+ let changed=false;
+ for(const f of data){
+  if(f.photo&&String(f.photo).startsWith("data:")){
+   try{await v25PutPhoto(f.id,f.photo);f.photo="idb:"+f.id;changed=true}catch(e){console.warn(e)}
+  }
+ }
+ if(changed)v25SafeSave();
+}
+function v25SafeSave(){
+ try{
+  const slim=data.map(f=>({...f,photo:(f.photo&&String(f.photo).startsWith("idb:"))?f.photo:""}));
+  localStorage.setItem(KEY,JSON.stringify(slim));
+  return true;
+ }catch(e){
+  alert("음식 정보 저장에 실패했습니다. 사진은 별도 저장소를 사용하므로 브라우저 저장공간을 확인해 주세요.");
+  return false;
+ }
+}
+async function v25StorePhoto(id,dataUrl){
+ await v25PutPhoto(id,dataUrl);
+ const f=data.find(x=>x.id===id);if(f)f.photo="idb:"+id;
+ if(!v25SafeSave())throw new Error("음식 정보 저장 실패");
+}
+
+function v25CompressImage(file,maxSide=900,maxBytes=180000){
+ return new Promise((resolve,reject)=>{
+  if(!file){reject(new Error("사진 파일이 없습니다."));return}
+  const r=new FileReader();r.onerror=()=>reject(new Error("사진을 읽을 수 없습니다."));r.onload=()=>{const im=new Image();im.onerror=()=>reject(new Error("사진을 읽을 수 없습니다."));im.onload=()=>{let scale=Math.min(1,maxSide/Math.max(im.width,im.height));let w=Math.max(1,Math.round(im.width*scale)),h=Math.max(1,Math.round(im.height*scale));const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(im,0,0,w,h);let q=.78;const loop=()=>c.toBlob(b=>{if(!b){reject(new Error("사진 압축 실패"));return}if(b.size<=maxBytes||q<=.32){const rr=new FileReader();rr.onload=()=>resolve(rr.result);rr.onerror=()=>reject(new Error("사진 변환 실패"));rr.readAsDataURL(b)}else{q-=.08;loop()}},"image/jpeg",q);loop()};im.src=r.result};r.readAsDataURL(file)
+ })
+}
+
+// Override photo handlers so every new photo is stored in IndexedDB, not LocalStorage.
+async function takePhoto(id){
+ const video=$("cameraVideo"),canvas=$("cameraCanvas");if(!video||!video.videoWidth)return;
+ let w=video.videoWidth,h=video.videoHeight,max=900;if(w>max){h=Math.round(h*max/w);w=max}canvas.width=w;canvas.height=h;canvas.getContext("2d").drawImage(video,0,0,w,h);
+ const blob=await new Promise(r=>canvas.toBlob(r,"image/jpeg",.78));if(!blob){alert("사진 생성에 실패했습니다.");return}
+ const file=new File([blob],"camera.jpg",{type:"image/jpeg"});
+ try{const dataUrl=await v25CompressImage(file,900,180000);stopCamera();await v25StorePhoto(id,dataUrl);render();await detail(id)}catch(e){alert("사진 저장에 실패했습니다. 다시 시도해 주세요.");console.error(e)}
+}
+async function handlePhotoFile(id,file){
+ if(!file)return;
+ try{const dataUrl=await v25CompressImage(file,900,180000);await v25StorePhoto(id,dataUrl);render();await detail(id)}catch(e){alert("사진 등록에 실패했습니다. 다른 사진으로 다시 시도해 주세요.");console.error(e)}
+}
+async function saveEdit(id){
+ const f=data.find(x=>x.id===id);if(!f)return;
+ f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value||"미분류";
+ const file=$("e_photo")?.files?.[0];
+ try{if(file){const dataUrl=await v25CompressImage(file,900,180000);await v25StorePhoto(id,dataUrl)}else v25SafeSave();render();await detail(id)}catch(e){alert("저장 중 문제가 발생했습니다. 사진을 다시 선택해 주세요.");console.error(e)}
+}
+async function saveAdd(){
+ const name=$("a_name").value.trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
+ const f={id:"u"+Date.now(),name,cat:"미분류",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,favorite:false,place:$("a_place").value,feel:$("a_feel").value,again:$("a_again").value,memo:$("a_memo").value.trim()};
+ try{const file=$("a_photo")?.files?.[0];data.unshift(f);if(file){const dataUrl=await v25CompressImage(file,900,180000);await v25StorePhoto(f.id,dataUrl)}else v25SafeSave();closeModal();render()}catch(e){data=data.filter(x=>x.id!==f.id);v25SafeSave();alert("음식을 저장하는 중 문제가 발생했습니다. 다시 시도해 주세요.");console.error(e)}
+}
+function deleteFood(id){if(!confirm("이 음식을 도감에서 삭제할까요?"))return;const old=data.find(f=>f.id===id);data=data.filter(f=>f.id!==id);v25SafeSave();if(old&&old.photo) v25DeletePhoto(id).catch(()=>{});closeModal();render()}
+
+// Backup/restore includes photos as data URLs so it is self-contained.
+async function exportV25Backup(){
+ const foods=[];for(const f of data){foods.push({...f,photo:await v25GetPhoto(f)})}
+ const payload={version:"V25",createdAt:new Date().toISOString(),foods,categories:v25GetCategories()};
+ const blob=new Blob([JSON.stringify(payload)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="어린이_음식도감_V25_백업.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
+async function importV25Backup(file){
+ if(!file)return;try{const payload=JSON.parse(await file.text());if(!Array.isArray(payload.foods))throw new Error("백업 파일 형식이 올바르지 않습니다.");data=payload.foods.map(f=>({...f,favorite:!!f.favorite}));for(const f of data){if(f.photo&&String(f.photo).startsWith("data:")){await v25PutPhoto(f.id,f.photo);f.photo="idb:"+f.id}}v25SaveCategories(Array.isArray(payload.categories)?payload.categories:v25GetCategories());if(v25SafeSave()){render();alert("백업을 성공적으로 복원했습니다.")}}catch(e){alert("백업 복원에 실패했습니다.\n"+e.message)}}
+
+async function initV25(){
+ // Migrate any photos that older V25 versions stored in LocalStorage.
+ try{await v25MigratePhotos()}catch(e){console.warn("사진 이전 실패",e)}
+ // Normalize favorite field from older versions.
+ data=data.map(f=>({...f,favorite:!!(f.favorite||f.fav)}));
+ v25SafeSave();
+ render();
+}
+
 function detail(id){
  const f=data.find(x=>x.id===id); if(!f)return;
  openModal(`<div>${f.photo?`<img class="detailPhoto" src="${f.photo}" alt="">`:`<div class="pic" style="height:220px;border-radius:18px">🍴</div>`}</div>
@@ -148,7 +256,7 @@ function resizeImage(data,max,q,done){
 }
 function saveAdd(){
  const name=$("a_name").value.trim();if(!name){alert("음식 이름을 먼저 입력해 주세요.");return}
- const f={id:"u"+Date.now(),name,cat:"새로 발견한 음식",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,
+ const f={id:"u"+Date.now(),name,cat:"미분류",desc:"",ing:"",how:"",health:"",tip:"",photo:"",seen:true,fav:false,
  place:$("a_place").value,feel:$("a_feel").value,again:$("a_again").value,memo:$("a_memo").value.trim()};
  const file=$("a_photo").files[0],finish=()=>{data.unshift(f);save();closeModal();render()};
  if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
@@ -299,108 +407,61 @@ function v25CompressImage(file){
 }
 
 function v25GetCategories(){
-  let cats = [];
-  try{ cats = JSON.parse(localStorage.getItem(V25_CATEGORY_KEY) || "[]"); }catch(e){}
-  if(!Array.isArray(cats)) cats = [];
-  data.forEach(f=>{
-    const c = String(f.cat || "").trim();
-    if(c && !cats.includes(c)) cats.push(c);
-  });
-  if(!cats.includes("미분류")) cats.unshift("미분류");
+  let cats=[];
+  try{cats=JSON.parse(localStorage.getItem(V25_CATEGORY_KEY)||"[]")}catch(e){cats=[]}
+  if(!Array.isArray(cats))cats=[];
+  data.forEach(f=>{const c=String(f.cat||"").trim(); if(c&&!cats.includes(c))cats.push(c)});
+  if(!cats.includes("미분류"))cats.unshift("미분류");
   return cats;
 }
-
 function v25SaveCategories(cats){
-  localStorage.setItem(
-    V25_CATEGORY_KEY,
-    JSON.stringify([...new Set(cats.map(x=>String(x||"").trim()).filter(Boolean))])
-  );
+  const clean=[...new Set(cats.map(x=>String(x||"").trim()).filter(Boolean))];
+  localStorage.setItem(V25_CATEGORY_KEY,JSON.stringify(clean));
 }
-
 function v25CategoryOptions(current){
-  return v25GetCategories().map(c=>{
-    const selected = c === current ? " selected" : "";
-    return `<option value="${esc(c)}"${selected}>${esc(c)}</option>`;
-  }).join("");
+  return v25GetCategories().map(c=>`<option value="${esc(c)}"${c===current?' selected':''}>${esc(c)}</option>`).join("");
 }
-
 function manageCategories(foodId){
-  const cats = v25GetCategories();
-  openModal(`
-    <h2>📂 카테고리 관리</h2>
-    <div class="infoBox">전체 카테고리를 추가·이름변경·삭제할 수 있습니다. 삭제하면 해당 음식은 미분류로 이동합니다.</div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">
-      ${cats.map(c=>`
-        <div class="catRow" data-cat="${esc(c)}">
-          <span style="flex:1;font-size:16px">${esc(c)}
-            <small style="color:#777">(${data.filter(f=>(f.cat||"미분류")===c).length}개)</small>
-          </span>
-          <button type="button" class="alt" onclick="renameCategory(this.closest('.catRow').dataset.cat,'${foodId}')">✏️ 이름변경</button>
-          <button type="button" class="danger" onclick="removeCategory(this.closest('.catRow').dataset.cat,'${foodId}')">🗑️ 삭제</button>
-        </div>`).join("")}
+  const cats=v25GetCategories();
+  openModal(`<h2>📂 카테고리 관리</h2>
+    <div class="infoBox">모든 카테고리를 추가·이름변경·삭제할 수 있습니다. 삭제하면 해당 음식은 미분류로 이동합니다.</div>
+    <div class="catManagerList">
+      ${cats.map(c=>`<div class="catRow" data-cat="${esc(c)}">
+        <span style="flex:1;font-size:16px">${esc(c)} <small style="color:#777">(${data.filter(f=>(f.cat||"미분류")===c).length}개)</small></span>
+        <button type="button" class="alt" onclick="v25RenameFromRow(this,'${foodId}')">✏️ 이름변경</button>
+        <button type="button" class="danger" onclick="v25DeleteFromRow(this,'${foodId}')">🗑️ 삭제</button>
+      </div>`).join("")}
     </div>
-    <div class="field">
-      <label>➕ 새 카테고리</label>
-      <div style="display:flex;gap:8px">
-        <input id="v25NewCategory" style="flex:1" placeholder="예: 과일, 디저트">
-        <button type="button" onclick="addCategory('${foodId}')">추가</button>
-      </div>
+    <div class="field"><label>➕ 새 카테고리</label>
+      <div style="display:flex;gap:8px"><input id="v25NewCategory" style="flex:1" placeholder="예: 과일, 디저트"><button type="button" onclick="addCategory('${foodId}')">추가</button></div>
     </div>
-    <div class="actions">
-      <button type="button" class="alt" onclick="editFood('${foodId}')">돌아가기</button>
-    </div>
-  `);
+    <div class="actions"><button type="button" class="alt" onclick="editFood('${foodId}')">돌아가기</button></div>`);
 }
-
+function v25RenameFromRow(btn,foodId){renameCategory(btn.closest('.catRow').dataset.cat,foodId)}
+function v25DeleteFromRow(btn,foodId){removeCategory(btn.closest('.catRow').dataset.cat,foodId)}
 function addCategory(foodId){
-  const input = document.getElementById("v25NewCategory");
-  const name = input ? input.value.trim() : "";
-  if(!name){ alert("카테고리 이름을 입력해 주세요."); return; }
-  const cats = v25GetCategories();
-  if(cats.includes(name)){ alert("이미 존재하는 카테고리입니다."); return; }
-  cats.push(name);
-  v25SaveCategories(cats);
-  render();
-  manageCategories(foodId);
+  const input=document.getElementById("v25NewCategory"),name=(input?.value||"").trim();
+  if(!name){alert("카테고리 이름을 입력해 주세요.");return}
+  const cats=v25GetCategories();
+  if(cats.includes(name)){alert("이미 존재하는 카테고리입니다.");return}
+  cats.push(name);v25SaveCategories(cats);render();manageCategories(foodId);
 }
-
 function renameCategory(oldName,foodId){
-  const next = prompt(`'${oldName}'의 새 이름을 입력하세요.`,oldName);
-  if(next === null) return;
-  const name = next.trim();
-  if(!name){ alert("이름을 입력해 주세요."); return; }
-
-  const cats = v25GetCategories();
-  if(name !== oldName && cats.includes(name)){
-    alert("이미 존재하는 카테고리입니다.");
-    return;
-  }
-
-  data.forEach(f=>{
-    if((f.cat || "미분류") === oldName) f.cat = name;
-  });
-
-  v25SaveCategories(cats.map(c=>c===oldName ? name : c));
-  v25SafeSave();
-  render();
-  manageCategories(foodId);
+  const next=prompt(`'${oldName}'의 새 이름을 입력하세요.`,oldName);
+  if(next===null)return;
+  const name=next.trim();
+  if(!name){alert("이름을 입력해 주세요.");return}
+  const cats=v25GetCategories();
+  if(name!==oldName&&cats.includes(name)){alert("이미 존재하는 카테고리입니다.");return}
+  data.forEach(f=>{if((f.cat||"미분류")===oldName)f.cat=name});
+  v25SaveCategories(cats.map(c=>c===oldName?name:c));v25SafeSave();render();manageCategories(foodId);
 }
-
 function removeCategory(name,foodId){
-  const cats = v25GetCategories();
-  if(!cats.includes(name)) return;
-
-  const count = data.filter(f=>(f.cat || "미분류")===name).length;
-  if(!confirm(`'${name}' 카테고리를 삭제할까요?\n음식 ${count}개는 '미분류'로 이동합니다.`)) return;
-
-  data.forEach(f=>{
-    if((f.cat || "미분류") === name) f.cat = "미분류";
-  });
-
-  v25SaveCategories(cats.filter(c=>c!==name));
-  v25SafeSave();
-  render();
-  manageCategories(foodId);
+  const cats=v25GetCategories(); if(!cats.includes(name))return;
+  const count=data.filter(f=>(f.cat||"미분류")===name).length;
+  if(!confirm(`'${name}' 카테고리를 삭제할까요?\n음식 ${count}개는 미분류로 이동합니다.`))return;
+  data.forEach(f=>{if((f.cat||"미분류")===name)f.cat="미분류"});
+  v25SaveCategories(cats.filter(c=>c!==name));v25SafeSave();render();manageCategories(foodId);
 }
 
 function toggleFavorite(id){
@@ -485,7 +546,7 @@ function editFood(id){
 function editField(id,label,val){return `<div class="field"><label>${label}</label><textarea id="${id}">${esc(val||"")}</textarea></div>`}
 function saveEdit(id){
  const f=data.find(x=>x.id===id);if(!f)return;
- f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"새로 발견한 음식";
+ f.desc=$("e_desc").value.trim();f.ing=$("e_ing").value.trim();f.how=$("e_how").value.trim();f.health=$("e_health").value.trim();f.tip=$("e_tip").value.trim();f.cat=$("e_cat").value.trim()||"미분류";
  const file=$("e_photo").files[0];
  const finish=()=>{save();detail(id);render()};
  if(file){const r=new FileReader();r.onload=()=>resizeImage(r.result,1000,.82,x=>{f.photo=x;finish()});r.readAsDataURL(file)}else finish();
@@ -497,8 +558,7 @@ function deleteFood(id){
 function backup(){
  const blob=new Blob([JSON.stringify(data)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="어린이음식도감_백업.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-$("addBtn").onclick=addFood;$("parentBtn").onclick=parent;$("backupBtn").onclick=backup;
-render();
+$("addBtn").onclick=addFood;$("parentBtn").onclick=parent;$("backupBtn").onclick=exportV25Backup;initV25();
 </script>
 </body>
 </html>
