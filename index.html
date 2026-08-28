@@ -51,7 +51,7 @@ button{font-size:16px;padding:14px 10px}
 .photoBig span{font-size:14px}
 .actions button{font-size:16px;min-height:50px}
 .empty{font-size:17px}
-.catRow{display:flex;gap:7px;align-items:center;padding:10px;border:1px solid #ddd;border-radius:12px;background:#fafafa}.favStar{position:absolute;right:8px;top:8px;z-index:5;border:0;background:rgba(255,255,255,.95);border-radius:50%;font-size:24px;width:40px;height:40px}</style>
+.catRow{display:flex;gap:7px;align-items:center;padding:10px;border:1px solid #ddd;border-radius:12px;background:#fafafa}.favStar{position:absolute;right:8px;top:8px;z-index:5;border:0;background:rgba(255,255,255,.95);border-radius:50%;font-size:24px;width:40px;height:40px}.card{position:relative}\n</style>
 
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,7 +59,12 @@ button{font-size:16px;padding:14px 10px}
 <meta name="apple-mobile-web-app-title" content="어린이 음식도감">
 <link rel="apple-touch-icon" href="icon-192.png">
 
-<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"><link rel="icon" sizes="192x192" href="icon-192.png"></head>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"><link rel="icon" sizes="192x192" href="icon-192.png">
+<style id="favorite-card-repair">
+.favStar{cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.favStar:active{transform:scale(.97)}
+</style>
+</head>
 <body>
 <header>
 <h1>🍴 어린이 음식도감</h1>
@@ -108,8 +113,10 @@ $("modal").addEventListener("click",e=>{if(e.target===$("modal"))closeModal()})
 
 function renderFilters(){
  const cats=["전체","__FAVORITES__",...v25GetCategories()];
- $(
-"filters").innerHTML=cats.map(c=>`<button class="chip ${c===category?"on":""}" onclick="setCat(${JSON.stringify(c)})">${c==="__FAVORITES__"?"⭐ 즐겨찾기":esc(c)}</button>`).join("");
+ $("filters").innerHTML=cats.map(c=>{
+   const js=JSON.stringify(c).replace(/"/g,"&quot;");
+   return `<button type="button" class="chip ${c===category?"on":""}" onclick="setCat(${js})">${c==="__FAVORITES__"?"⭐ 즐겨찾기":esc(c)}</button>`;
+ }).join("");
 }
 function setCat(c){category=c;render()}
 function render(){
@@ -117,7 +124,7 @@ function render(){
  let list=category==="전체"?data:category==="__FAVORITES__"?data.filter(f=>!!f.favorite):data.filter(f=>(f.cat||"미분류")===category);
  const q=(document.getElementById("v25SearchInput")?.value||"").trim().toLowerCase();
  if(q)list=list.filter(f=>[f.name,f.ing,f.desc,f.tip,f.health,f.how].some(v=>String(v||"").toLowerCase().includes(q)));
- $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')"><button type="button" class="favStar" onclick="event.stopPropagation();toggleFavorite('${f.id}')">${f.favorite?"⭐":"☆"}</button><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
+ $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')"><button type="button" class="favStar" aria-label="${f.favorite?'즐겨찾기 해제':'즐겨찾기 추가'}" title="${f.favorite?'즐겨찾기 해제':'즐겨찾기 추가'}" onclick="event.stopPropagation();toggleFavorite('${f.id}')">${f.favorite?'⭐ 즐겨찾기 해제':'☆ 즐겨찾기 추가'}</button><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
  loadAllPhotoCards(list);
 }
 async function loadAllPhotoCards(list){
@@ -713,17 +720,6 @@ function v251FillKnowledge(){
   if(changed)v251SafeSave();
 }
 
-async function render(){
-  renderFilters();
-  let list=category==="전체"?data:category==="__FAVORITES__"?data.filter(f=>!!f.favorite):data.filter(f=>(f.cat||"미분류")===category);
-  const q=(document.getElementById("v25SearchInput")?.value||"").trim().toLowerCase();
-  if(q)list=list.filter(f=>[f.name,f.ing,f.desc,f.tip,f.health,f.how].some(v=>String(v||"").toLowerCase().includes(q)));
-  $("grid").innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${f.id}')"><button type="button" class="favStar" onclick="event.stopPropagation();toggleFavorite('${f.id}')">${f.favorite?"⭐":"☆"}</button><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
-  for(const f of list){
-    if(!f.photo)continue;
-    try{const src=await v251GetPhoto(f);const el=document.getElementById("pic-"+f.id);if(el&&src)el.innerHTML=`<img src="${src}" alt="${esc(f.name)}" loading="lazy">`;}catch(e){console.warn("photo render",f.id,e)}
-  }
-}
 async function detail(id){
   const f=data.find(x=>x.id===id);if(!f)return;
   const src=await v251GetPhoto(f);
@@ -1382,37 +1378,45 @@ function v30BlobToData(v){
  return Promise.resolve("");
 }
 async function v30ReadDB(dbName,storeName){
- let db;try{db=await v30OpenDB(dbName)}catch(e){return {}};
+ let db;
+ try{db=await v30OpenDB(dbName)}catch(e){return {}}
  if(!db.objectStoreNames.contains(storeName)){db.close();return {}}
- return new Promise((resolve,reject)=>{
-  const out={},tx=db.transaction(storeName,"readonly"),store=tx.objectStore(storeName);
-  const req=store.openCursor();
-  req.onsuccess=async ev=>{
-   const c=ev.target.result;
-   if(!c){db.close();resolve(out);return}
-   try{const d=await v30BlobToData(c.value);if(d)out[String(c.key)]=d}catch(_){ }
-   c.continue();
-  };
-  req.onerror=()=>{db.close();reject(req.error||new Error("사진 읽기 실패"))};
- });
+ try{
+  const rows=await new Promise((resolve,reject)=>{
+   const tx=db.transaction(storeName,"readonly");
+   const store=tx.objectStore(storeName);
+   const vr=store.getAll(), kr=store.getAllKeys();
+   let values,keys;
+   vr.onsuccess=()=>{values=vr.result||[];if(keys!==undefined)resolve({keys,values})};
+   kr.onsuccess=()=>{keys=kr.result||[];if(values!==undefined)resolve({keys,values})};
+   vr.onerror=()=>reject(vr.error||new Error("사진 읽기 실패"));
+   kr.onerror=()=>reject(kr.error||new Error("사진 키 읽기 실패"));
+  });
+  const out={};
+  for(let i=0;i<rows.keys.length;i++){
+   try{const d=await v30BlobToData(rows.values[i]);if(d)out[String(rows.keys[i])]=d}catch(_){}
+  }
+  db.close(); return out;
+ }catch(e){try{db.close()}catch(_){} return {}}
 }
 async function v30ReadAllPhotos(){
  const out={};
- // First prefer the database used by V25-V29.
  for(const dbName of PHOTO_DB_NAMES){
   for(const storeName of PHOTO_STORE_NAMES){
-   try{const got=await v30ReadDB(dbName,storeName);Object.assign(out,got)}catch(_){ }
+   try{
+    const got=await v30ReadDB(dbName,storeName);
+    for(const [id,src] of Object.entries(got)) if(src&&!out[id]) out[id]=src;
+   }catch(_){}
   }
  }
- // Then fill gaps from the application's food records.
  if(Array.isArray(window.data)){
   for(const f of window.data){
    const id=String(f.id);
    if(out[id])continue;
    try{
-    const src=await (typeof v25GetPhoto==='function'?v25GetPhoto(f):Promise.resolve(String(f.photo||"")));
+    const src=await (typeof v25GetPhoto==="function"?v25GetPhoto(f):Promise.resolve(String(f.photo||"")));
     if(src&&String(src).startsWith("data:"))out[id]=src;
-   }catch(_){ }
+   }catch(_){}
   }
  }
  return out;
@@ -1471,46 +1475,74 @@ async function v30Restore(file){
  if(!file)return;
  try{
   const p=JSON.parse(await file.text());
-  if(!p||p.app!=="어린이 음식도감"||!Array.isArray(p.foods))throw new Error("올바른 어린이 음식도감 백업 파일이 아닙니다.");
-  const topPhotos=(p.photos&&typeof p.photos==='object')?p.photos:{};
-  const photoMap={...topPhotos};
-  for(const f of p.foods){
-   if(f.photo&&String(f.photo).startsWith("data:"))photoMap[String(f.id)]=f.photo;
+  if(!p||p.app!=="어린이 음식도감"||!Array.isArray(p.foods))
+   throw new Error("올바른 어린이 음식도감 백업 파일이 아닙니다.");
+
+  const photoMap={};
+  if(p.photos&&typeof p.photos==="object"){
+   for(const [id,src] of Object.entries(p.photos))
+    if(src&&String(src).startsWith("data:"))photoMap[String(id)]=src;
   }
+  for(const f of p.foods)
+   if(f&&f.photo&&String(f.photo).startsWith("data:"))photoMap[String(f.id)]=f.photo;
+
   const photoCount=Object.keys(photoMap).length;
-  if(!confirm(`V30 백업을 복원할까요?\n음식 ${p.foods.length}개 · 사진 ${photoCount}개\n\n기존 음식과 사진은 가능한 한 보존합니다.`))return;
-  if(typeof data === "undefined" || !Array.isArray(data))throw new Error("음식 데이터 저장소를 찾을 수 없습니다.");
+  if(!confirm(`백업을 복원할까요?\n음식 ${p.foods.length}개 · 백업 사진 ${photoCount}개\n\n기존 음식과 사진은 가능한 한 보존합니다.`))return;
+  if(!Array.isArray(data))throw new Error("음식 데이터 저장소를 찾을 수 없습니다.");
 
   const old=data.slice();
   const oldById=new Map(old.map(f=>[String(f.id),f]));
   const oldByName=new Map(old.map(f=>[String(f.name||"").trim(),f]));
+
   const next=p.foods.map(src=>{
    const f={...src,favorite:!!(src.favorite||src.fav)};
    const oldF=oldById.get(String(src.id))||oldByName.get(String(src.name||"").trim());
-   // Empty/marker backup photos never erase a working existing photo.
-   if(!f.photo || !String(f.photo).startsWith("data:")){
-    if(oldF?.photo)f.photo=oldF.photo;
-   }
+   if(!(f.photo&&String(f.photo).startsWith("data:"))&&oldF?.photo)f.photo=oldF.photo;
    return f;
   });
   data.splice(0,data.length,...next);
-  if(typeof v25SaveCategories==='function'&&Array.isArray(p.categories))v25SaveCategories(p.categories);
-  if(typeof v28Save==='function')v28Save();else if(typeof v251SafeSave==='function')v251SafeSave();else if(typeof save==='function')save();
 
-  let restored=0,failed=0,kept=0;
-  for(const f of next){
-   const id=String(f.id);
-   const src=photoMap[id];
-   if(src&&String(src).startsWith("data:")){
-    if(await v30PutPhoto(id,src)){f.photo="idb:"+id;restored++}else failed++;
-   }else if(f.photo&&String(f.photo).startsWith("idb:")){
-    try{const existing=await (typeof v25GetStoredPhoto==='function'?v25GetStoredPhoto(id):Promise.resolve(""));if(existing)kept++}catch(_){ }
+  if(typeof v25SaveCategories==="function"&&Array.isArray(p.categories))
+   v25SaveCategories(p.categories);
+
+  let restored=0,kept=0,failed=0;
+  for(const f of data){
+   const id=String(f.id),src=photoMap[id];
+   if(src){
+    try{
+     await v30PutPhoto(id,src);
+     const check=await v25GetStoredPhoto(id);
+     if(check){f.photo="idb:"+id;restored++}else failed++;
+    }catch(e){console.warn("photo restore failed",id,e);failed++}
+    continue;
+   }
+   if(f.photo&&String(f.photo).startsWith("idb:")){
+    try{
+     const existing=await v25GetStoredPhoto(id);
+     if(existing){kept++;continue;}
+     const oldF=oldByName.get(String(f.name||"").trim());
+     if(oldF&&String(oldF.id)!==id&&oldF.photo){
+      const oldSrc=await v25GetPhoto(oldF);
+      if(oldSrc&&String(oldSrc).startsWith("data:")){
+       await v30PutPhoto(id,oldSrc);
+       const check=await v25GetStoredPhoto(id);
+       if(check){f.photo="idb:"+id;kept++}
+      }
+     }
+    }catch(_){}
    }
   }
-  if(typeof v28Save==='function')v28Save();else if(typeof v251SafeSave==='function')v251SafeSave();
-  if(typeof render==='function')await render();
-  alert(`V30 복원 완료\n음식 ${next.length}개\n사진 ${restored}개 복원 · 기존 사진 ${kept}개 유지${failed?` · 사진 ${failed}개 저장 실패`:""}`);
- }catch(e){console.error(e);alert("백업 복원에 실패했습니다.\n"+(e.message||e))}
+
+  if(typeof v28Save==="function")v28Save();
+  else if(typeof v251SafeSave==="function")v251SafeSave();
+  else if(typeof save==="function")save();
+  if(typeof render==="function")await render();
+
+  alert(`복원 완료\n음식 ${data.length}개\n사진 ${restored}개 복원 · 기존 사진 ${kept}개 유지${failed?` · 사진 ${failed}개 복원 실패`:""}\n\n※ 백업 파일 자체에 들어 있지 않은 사진은 복원할 수 없습니다.`);
+ }catch(e){
+  console.error(e);
+  alert("백업 복원에 실패했습니다.\n"+(e.message||e));
+ }
 }
 function v30PickRestore(){
  const i=document.createElement("input");i.type="file";i.accept=".json,application/json";
