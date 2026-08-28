@@ -6,8 +6,7 @@
 <title>어린이 음식도감 V30 최종 사진안전판</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#fffaf2;color:#333}
-header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index:5}
-h1{margin:0;font-size:29px} .sub{margin-top:5px;font-size:13px}
+header{padding:18px 16px;background:#ffe59a;text-align:center;position:sticky;top:0;z-index: 20;font-size:29px} .sub{margin-top:5px;font-size:13px}
 .controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
 button{border:0;border-radius:14px;padding:12px 9px;background:#fff;font-weight:700;box-shadow:0 2px 8px #00000014}
 button:active{transform:scale(.98)} .wrap{max-width:900px;margin:auto;padding:14px}
@@ -63,6 +62,16 @@ button{font-size:16px;padding:14px 10px}
 <style id="favorite-card-repair">
 .favStar{cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .favStar:active{transform:scale(.97)}
+</style>
+
+<style id="scroll-layer-repair">
+/* 음식카드가 상단 노란 메뉴 위로 떠오르지 않도록 레이어를 정리 */
+header, .topbar, .nav, .sticky, [class*="top"] {
+  position: relative;
+}
+.favStar {
+  z-index: 1 !important;
+}
 </style>
 </head>
 <body>
