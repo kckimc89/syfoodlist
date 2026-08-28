@@ -73,10 +73,10 @@ button{font-size:16px;padding:14px 10px}
 <div class="wrap">
 <div class="filters" id="filters"></div>
 <div id="v25Toolbar" style="margin:12px 0">
-<input id="v25SearchInput" oninput="render()" placeholder="🔍 음식 이름·재료·설명 검색" style="width:100%;box-sizing:border-box;padding:13px 15px;border:1px solid #ddd;border-radius:14px;font-size:17px">
+<input id="v25SearchInput" oninput="render()" placeholder="🔍 음식 이름·재료·설명 검색" style="width:100%;box-sizing:border-box;padding:13px 15px;border:1px solid #ddd;border-radius:14px;font-size:17px"><div style="margin-top:7px;font-size:13px;color:#777">⭐ 노란 별 = 즐겨찾기 · ☆ 빈 별 = 즐겨찾기 아님</div>
 <div style="display:flex;gap:8px;overflow:auto;margin-top:9px">
-<button type="button" onclick="window.v25SelectedCategory='';render()">전체</button>
-<button type="button" onclick="window.v25SelectedCategory='__FAVORITES__';render()">⭐ 즐겨찾기</button>
+<button type="button" onclick="setCat('전체')">전체</button>
+<button type="button" onclick="setCat('__FAVORITES__')">⭐ 즐겨찾기</button>
 </div></div><div id="grid" class="grid"></div>
 </div>
 <div id="modal" class="modal"><div id="sheet" class="sheet"></div></div>
@@ -461,7 +461,7 @@ function v25FilterFoods(list){
     ].some(v=>String(v||"").toLowerCase().includes(q)));
   }
 
-  const cat = window.v25SelectedCategory || "";
+  const cat = category || "";
   if(cat === "__FAVORITES__") out = out.filter(f=>!!f.favorite);
   else if(cat) out = out.filter(f=>(f.cat||"미분류")===cat);
 
@@ -502,8 +502,6 @@ function importV25Backup(file){
   };
   reader.readAsText(file);
 }
-
-window.v25SelectedCategory = "";
 /* ===== END V25 STABLE EXTENSIONS ===== */
 
 function editFood(id){
