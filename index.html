@@ -64,11 +64,19 @@ button{font-size:16px;padding:14px 10px}
 .favStar:active{transform:scale(.97)}
 </style>
 
-<style id="scroll-layer-repair">
-/* 음식카드가 상단 노란 메뉴 위로 떠오르지 않도록 레이어를 정리 */
-header, .topbar, .nav, .sticky, [class*="top"] {
-  position: relative;
+
+
+<style id="scroll-layer-fixed-header">
+/* 스크롤 레이어 최종 수정: 상단 노란 메뉴는 고정, 음식 목록만 스크롤 */
+#appHeader,
+.app-header,
+#header,
+header.appHeader {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 100 !important;
 }
+/* 즐겨찾기 버튼은 음식 카드의 레이어 안에만 존재 */
 .favStar {
   z-index: 1 !important;
 }
