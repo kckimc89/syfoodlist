@@ -1562,7 +1562,7 @@ window.addEventListener("load",()=>setTimeout(installV30Backup,1200));
     const q=(document.getElementById("v25SearchInput")?.value||"").trim().toLowerCase();
     if(q)list=list.filter(f=>[f.name,f.ing,f.desc,f.tip,f.health,f.how].some(v=>String(v||"").toLowerCase().includes(q)));
     const grid=document.getElementById("grid"); if(!grid)return;
-    grid.innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${String(f.id).replace(/'/g,"&#39;")}')"><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div><button type="button" class="favCardBtn ${f.favorite?"on":""}" onclick="event.stopPropagation();toggleFavorite('${String(f.id).replace(/'/g,"&#39;")}')">${f.favorite?"⭐ 즐겨찾기 해제":"☆ 즐겨찾기 추가"}</button></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
+    grid.innerHTML=list.length?list.map(f=>`<div class="card" onclick="detail('${String(f.id).replace(/'/g,"&#39;")}")"><div class="pic" id="pic-${f.id}">${f.photo?"<span>📷</span>":`<div>🍴<br><span style="font-size:13px">📷 사진을 등록해 보세요</span></div>`}</div><div class="ct"><div class="name">${esc(f.name)}</div><div class="cat">${esc(f.cat||"미분류")}</div><button type="button" class="favCardBtn ${f.favorite?"on":""}" onclick="event.stopPropagation();toggleFavorite('${String(f.id).replace(/'/g,"&#39;")}')">${f.favorite?"⭐ 즐겨찾기 해제":"☆ 즐겨찾기 추가"}</button></div></div>`).join(""):`<div class="empty">아직 음식이 없어요.</div>`;
     if(typeof v25GetPhoto==="function") loadAllPhotoCards(list);
   };
 
